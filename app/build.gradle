@@ -1,0 +1,3 @@
+plugins { id 'com.android.application' }
+android { namespace 'com.example.xiaogeminibridge'; compileSdk 35
+ defaultConfig { applicationId 'com.example.xiaogeminibridge'; minSdk 29; targetSdk 32; versionCode 1; versionName '0.1-test' } }
