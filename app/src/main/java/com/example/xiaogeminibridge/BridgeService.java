@@ -1,80 +1,60 @@
 package com.example.xiaogeminibridge;
 import android.accessibilityservice.AccessibilityService;
+import android.app.KeyguardManager;
+import android.content.Intent;
+import android.os.SystemClock;
+import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.app.KeyguardManager;
-import android.content.*;
-import android.os.*;
-import android.util.Log;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+
 public class BridgeService extends AccessibilityService {
  private static final String TAG="XiaoGeminiBridge";
- private long lastTrigger=0, openedAt=0;
- private boolean awaitingLive=false;
- private static final String PREFS="bridge_diagnostics";
- private void record(String key,String value){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(key,value).apply();}
- private void recordEvent(String pkg, AccessibilityEvent e){
-  if(e.getEventType()!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && e.getEventType()!=AccessibilityEvent.TYPE_WINDOWS_CHANGED)return;
-  String cls=e.getClassName()==null?"":e.getClassName().toString();
-  record("last_event",pkg+" | "+cls+" | "+android.view.accessibility.AccessibilityEvent.eventTypeToString(e.getEventType()));
-  if(pkg.contains("miui")||pkg.contains("xiaomi"))record("last_xiaomi_event",pkg+" | "+cls);
- }
- private final Handler handler=new Handler(Looper.getMainLooper());
+ private static final String TARGET="com.ldd.ai";
+ private static final long COOLDOWN_MS=1800L;
+ private long lastTrigger=0L;
+ private void record(String key,String value){getSharedPreferences("bridge_diagnostics",MODE_PRIVATE).edit().putString(key,value).apply();}
+ @Override protected void onServiceConnected(){super.onServiceConnected();record("last_status","Accessibility connected");}
  @Override public void onAccessibilityEvent(AccessibilityEvent event){
   if(event==null)return;
+  int type=event.getEventType();
+  if(type!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && type!=AccessibilityEvent.TYPE_WINDOWS_CHANGED)return;
   String pkg=event.getPackageName()==null?"":event.getPackageName().toString();
+  String cls=event.getClassName()==null?"":event.getClassName().toString();
+  record("last_event",pkg+" | "+cls+" | "+AccessibilityEvent.eventTypeToString(type));
+  boolean xiao=pkg.equals("com.miui.voiceassist")||pkg.equals("com.xiaomi.aiasst")||pkg.equals("com.miui.aiasst")||pkg.equals("com.xiaomi.micolauncher");
+  if(!xiao)return;
+  record("last_xiaomi_event",pkg+" | "+cls);
   long now=SystemClock.elapsedRealtime();
-  recordEvent(pkg,event);
-  if(awaitingLive && now-openedAt<7000 && (pkg.contains("google")||pkg.contains("bard"))){
-   AccessibilityNodeInfo root=getRootInActiveWindow();
-   if(root!=null && clickLive(root)){awaitingLive=false;Log.i(TAG,"Live control tapped");}
-   return;
-  }
-  if(now-lastTrigger<12000)return;
+  if(now-lastTrigger<COOLDOWN_MS)return;
   KeyguardManager km=(KeyguardManager)getSystemService(KEYGUARD_SERVICE);
-  if(km!=null&&km.isKeyguardLocked()){record("last_status","Blocked: keyguard locked");return;}
-  if(!(pkg.startsWith("com.miui.voiceassist")||pkg.startsWith("com.xiaomi.aiasst")||pkg.startsWith("com.xiaomi.micolauncher")||pkg.startsWith("com.miui.aiasst")))return;
-  record("last_status","Xiao AI package matched: "+pkg);
-  boolean matched=hasWakeText(event.getText());
+  if(km!=null && km.isKeyguardLocked()){record("last_status","Blocked: screen locked");return;}
+  boolean wake=hasWakeText(event.getText());
   AccessibilityNodeInfo source=event.getSource();
-  if(!matched && source!=null)matched=containsWakeText(source,0);
-  if(!matched){AccessibilityNodeInfo root=getRootInActiveWindow();if(root!=null)matched=containsWakeText(root,0);}
-  if(!matched && pkg.equals("com.miui.voiceassist") &&
-      event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-      event.getClassName()!=null &&
-      event.getClassName().toString().contains("FrameLayout")){
-    matched=true;
-    record("last_status","Xiao AI overlay detected without accessible text");
-  }
-  if(!matched){record("last_status","Package matched but wake text not accessible: "+pkg);return;}
+  if(!wake && source!=null)wake=containsWakeText(source,0);
+  if(!wake){AccessibilityNodeInfo root=getRootInActiveWindow();if(root!=null)wake=containsWakeText(root,0);}
+  // Xiaomi often hides overlay text from accessibility. Restrict fallback to window
+  // transitions of the voice assistant, not generic content changes or settings.
+  boolean overlay=type==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+    (cls.contains("FrameLayout")||cls.toLowerCase(java.util.Locale.ROOT).contains("voiceassist"));
+  if(!wake && !overlay){record("last_status","Xiao AI event without confirmed overlay: "+cls);return;}
   lastTrigger=now;
-  record("last_status","Wake detected, launching Gemini");
   try{
-   Intent launch=getPackageManager().getLaunchIntentForPackage("com.google.android.apps.bard");
-   if(launch==null)launch=getPackageManager().getLaunchIntentForPackage("com.google.android.googlequicksearchbox");
-   if(launch==null){Log.w(TAG,"Gemini/Google not found");record("last_status","Gemini/Google launch intent unavailable");return;}
-   launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);
-   startActivity(launch);record("last_status","Gemini launch requested");awaitingLive=true;openedAt=now;
-   handler.postDelayed(()->awaitingLive=false,7500);
-  }catch(Exception ex){Log.e(TAG,"Launch blocked",ex);record("last_status","Launch failed: "+ex.getClass().getSimpleName());}
+   Intent launch=getPackageManager().getLaunchIntentForPackage(TARGET);
+   if(launch==null){record("last_status","AI app not installed or no launcher: "+TARGET);return;}
+   launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+   startActivity(launch);
+   record("last_status","AI launch requested via "+(wake?"wake text":"overlay"));
+  }catch(Exception e){Log.e(TAG,"Unable to launch AI",e);record("last_status","Launch failed: "+e.getClass().getSimpleName());}
  }
  private boolean hasWakeText(List<CharSequence> texts){if(texts==null)return false;for(CharSequence t:texts)if(t!=null&&(t.toString().contains("我在听")||t.toString().contains("正在聆听")))return true;return false;}
- private boolean containsWakeText(AccessibilityNodeInfo node,int depth){if(node==null||depth>12)return false;
-  CharSequence t=node.getText(),d=node.getContentDescription();
-  if(hasWakeText(Arrays.asList(t,d)))return true;
-  for(int i=0;i<node.getChildCount();i++)if(containsWakeText(node.getChild(i),depth+1))return true;
+ private boolean containsWakeText(AccessibilityNodeInfo n,int depth){
+  if(n==null||depth>10)return false;
+  if(hasWakeText(Arrays.asList(n.getText(),n.getContentDescription())))return true;
+  for(int i=0;i<n.getChildCount();i++)if(containsWakeText(n.getChild(i),depth+1))return true;
   return false;
  }
- private boolean clickLive(AccessibilityNodeInfo node){
-  if(node==null)return false;
-  CharSequence t=node.getText(),d=node.getContentDescription();
-  String label=(t==null?"":t.toString())+" "+(d==null?"":d.toString());
-  String normalized=label.trim().toLowerCase(Locale.ROOT);
-  if(normalized.equals("live")||normalized.equals("gemini live")||normalized.equals("trò chuyện trực tiếp")){
-   AccessibilityNodeInfo n=node;while(n!=null){if(n.isClickable())return n.performAction(AccessibilityNodeInfo.ACTION_CLICK);n=n.getParent();}
-  }
-  for(int i=0;i<node.getChildCount();i++)if(clickLive(node.getChild(i)))return true;
-  return false;
- }
- @Override public void onInterrupt(){}
+ @Override public void onInterrupt(){record("last_status","Accessibility interrupted");}
+ @Override public void onDestroy(){record("last_status","Accessibility service destroyed");super.onDestroy();}
 }
