@@ -39,6 +39,13 @@ public class BridgeService extends AccessibilityService {
   AccessibilityNodeInfo source=event.getSource();
   if(!matched && source!=null)matched=containsWakeText(source,0);
   if(!matched){AccessibilityNodeInfo root=getRootInActiveWindow();if(root!=null)matched=containsWakeText(root,0);}
+  if(!matched && pkg.equals("com.miui.voiceassist") &&
+      event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+      event.getClassName()!=null &&
+      event.getClassName().toString().contains("FrameLayout")){
+    matched=true;
+    record("last_status","Xiao AI overlay detected without accessible text");
+  }
   if(!matched){record("last_status","Package matched but wake text not accessible: "+pkg);return;}
   lastTrigger=now;
   record("last_status","Wake detected, launching Gemini");
