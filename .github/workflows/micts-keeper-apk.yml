@@ -1,7 +1,7 @@
 name: Build MiCTS Keeper APK
 on:
   push:
-    branches: [main, feature/micts-keeper-boot-restore]
+    branches: [main, feature/micts-keeper-boot-restore, fix/micts-google-assistant-reboot]
     paths:
       - 'micts-keeper/**'
       - '.github/workflows/micts-keeper-apk.yml'
