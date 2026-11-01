@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -28,8 +29,9 @@ import java.util.Date;
 public class MainActivity extends Activity {
     private static final String TARGET="com.parallelc.micts/com.parallelc.micts.ui.activity.MainActivity";
     private static final String KEY="assistant";
-    private static final int PERIODIC=5100, FIRST=5110;
-    private static final long[] RETRIES={15000,45000,90000,180000,360000,600000};
+    private static final int LEGACY_PERIODIC=5100, FIRST=5110;
+    private static final long MAX_BOOT_WINDOW_MS=90000L;
+    private static final long[] RETRIES={15000,45000,90000};
     private TextView status;
     private LinearLayout panel;
 
@@ -64,22 +66,40 @@ public class MainActivity extends Activity {
         }catch(Exception e){result="Lỗi: "+e.getClass().getSimpleName()+": "+e.getMessage();}
         prefs(c).edit().putString("result",result).putLong("time",System.currentTimeMillis()).apply();
     }
+    // Do not retain the former 15-minute periodic job or old 3/6/10-minute retries.
+    private static void cleanupLegacy(JobScheduler js){
+        js.cancel(LEGACY_PERIODIC);
+        for(int i=3;i<6;i++)js.cancel(FIRST+i);
+    }
+    private static boolean insideWindow(Context c){
+        long start=prefs(c).getLong("bootStartElapsed",-1L);
+        long delta=SystemClock.elapsedRealtime()-start;
+        return start>=0 && delta>=0 && delta<=MAX_BOOT_WINDOW_MS;
+    }
     private static void jobs(Context c,boolean boot){
         JobScheduler js=(JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if(js==null)return;
+        cleanupLegacy(js);
         if(!enabled(c)){stop(c);return;}
+        if(!boot)return; // Opening the app must not create a permanent periodic check.
+        for(int i=0;i<RETRIES.length;i++)js.cancel(FIRST+i);
+        prefs(c).edit().putLong("bootStartElapsed",SystemClock.elapsedRealtime()).apply();
         ComponentName svc=new ComponentName(c,KeeperJobService.class);
-        js.schedule(new JobInfo.Builder(PERIODIC,svc).setPeriodic(900000L).setPersisted(true).build());
-        if(boot)for(int i=0;i<RETRIES.length;i++){
-            long t=RETRIES[i];
-            js.schedule(new JobInfo.Builder(FIRST+i,svc).setMinimumLatency(t).setOverrideDeadline(t+120000).build());
+        for(int i=0;i<RETRIES.length;i++){
+            long delay=RETRIES[i];
+            // The OS may delay JobScheduler; insideWindow blocks late writes after 90 s.
+            js.schedule(new JobInfo.Builder(FIRST+i,svc)
+                .setMinimumLatency(delay)
+                .setOverrideDeadline(delay+5000L)
+                .build());
         }
     }
     private static void stop(Context c){
         JobScheduler js=(JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if(js==null)return;
-        js.cancel(PERIODIC);
-        for(int i=0;i<RETRIES.length;i++)js.cancel(FIRST+i);
+        js.cancel(LEGACY_PERIODIC);
+        for(int i=0;i<6;i++)js.cancel(FIRST+i);
+        prefs(c).edit().remove("bootStartElapsed").apply();
     }
     public static class BootReceiver extends BroadcastReceiver{
         @Override public void onReceive(Context c,Intent intent){
@@ -89,7 +109,7 @@ public class MainActivity extends Activity {
     public static class KeeperJobService extends JobService{
         @Override public boolean onStartJob(JobParameters p){
             new Thread(()->{
-                try{if(enabled(this))attempt(this);}
+                try{if(enabled(this)&&insideWindow(this))attempt(this);}
                 finally{jobFinished(p,false);}
             },"MiCTS-restore").start();
             return true;
@@ -130,7 +150,7 @@ public class MainActivity extends Activity {
         scroll.addView(panel);setContentView(scroll);
         TextView heading=text("MiCTS Keeper",27,Color.WHITE);
         heading.setTypeface(null,Typeface.BOLD);panel.addView(heading);
-        TextView sub=text("Tự khôi phục Circle to Search trên HyperOS",15,0xffa9bacf);
+        TextView sub=text("Tự khôi phục MiCTS sau reboot: chỉ trong 90 giây đầu",15,0xffa9bacf);
         sub.setPadding(0,dp(8),0,dp(18));panel.addView(sub);
         status=text("",14,0xffe1ebff);status.setPadding(dp(15),dp(16),dp(15),dp(16));
         GradientDrawable bg=new GradientDrawable();
@@ -142,6 +162,7 @@ public class MainActivity extends Activity {
         addButton("Cài đặt tự khởi động và pin",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))));
         TextView help=text("CẤP QUYỀN ADB (MỘT LẦN):\n"+
              "adb shell pm grant com.ldd.mictskeeper android.permission.WRITE_SECURE_SETTINGS\n\n"+
+             "Tự thử lúc 15, 45, 90 giây sau BOOT_COMPLETED, sau đó dừng. Không kiểm tra định kỳ. "+
              "Bật Tự khởi động và Pin không hạn chế cho ứng dụng này. "+
              "HyperOS có thể trì hoãn tác vụ hoặc từ chối quyền; không bảo đảm khôi phục ngay trên mọi ROM.",13,0xffa9bacf);
         help.setPadding(0,dp(20),0,0);panel.addView(help);
