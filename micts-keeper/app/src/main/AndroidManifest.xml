@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <queries><package android:name="com.parallelc.micts"/></queries>
     <application android:label="MiCTS Keeper" android:allowBackup="false"
