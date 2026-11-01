@@ -1,0 +1,32 @@
+name: Build Gemini Restore Switch APK
+on:
+  push:
+    branches: [main, feature/gemini-restore-micts-switch]
+    paths:
+      - 'gemini-restore-switch/**'
+      - '.github/workflows/build-gemini-restore-switch.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gemini-restore-switch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Install Android SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build debug APK
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gemini-Restore-v4-Switch-APK
+          path: gemini-restore-switch/app/build/outputs/apk/debug/*.apk
