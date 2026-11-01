@@ -159,6 +159,7 @@ public class MainActivity extends Activity {
     p.topMargin=dp(12);layout.addView(b,p);b.setOnClickListener(v->fn.run());
   }
   private void select(String mode){
+    pref(this).edit().putString("last_requested_mode",mode).apply();
     boolean ok=change(this,mode,false);update();
     if(!ok)new AlertDialog.Builder(this).setTitle("Không chuyển được")
       .setMessage(pref(this).getString("result","Không rõ lỗi")+
@@ -176,8 +177,7 @@ public class MainActivity extends Activity {
       startActivity(i);
     }catch(Exception e){Toast.makeText(this,"Không mở được MiCTS.",Toast.LENGTH_LONG).show();}
   }
-  private void copy(){
-    String mode=pref(this).getString("mode",GEMINI);
+  private void copy(String mode){
     String cmd="adb shell settings put secure assistant "+
       (CIRCLE.equals(mode)?MICTS:original(this));
     ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
@@ -221,7 +221,8 @@ public class MainActivity extends Activity {
     button("Chuyển sang MiCTS (thử nghiệm)",0xff137f6a,()->select(CIRCLE));
     button("Mở MiCTS để thử",0xff394457,this::openMiCTS);
     button("Mở Digital Assistant",0xff394457,this::settings);
-    button("Sao chép lệnh ADB của chế độ đã chọn",0xff394457,this::copy);
+    button("Sao chép ADB chuyển sang Gemini",0xff394457,()->copy(GEMINI));
+    button("Sao chép ADB chuyển sang MiCTS",0xff394457,()->copy(CIRCLE));
     button("Kiểm tra lại",0xff394457,()->{capture(this);update();});
     button("Bật / tắt tự khôi phục Gemini",0xff394457,()->{
       boolean b0=!pref(this).getBoolean("auto_gemini",true);
