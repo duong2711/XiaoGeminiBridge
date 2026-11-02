@@ -1,71 +1,30 @@
-# Gemini Restore v4.3 — Chẩn đoán lỗi Home trên HyperOS
+# Gemini Home Restore v4.4 — chỉ dành cho nút Home
 
-- Đã sửa trường hợp ADB thiết lập Home đúng nhưng app vẫn cố ghi lại, gây `IllegalArgumentException`. Ứng dụng nay kiểm tra giá trị **trước khi ghi** và không đụng đến hệ thống nếu đã đúng.
-- Nếu chưa đúng mà ROM không cho ứng dụng tự ghi, hiển thị **thông điệp lỗi đầy đủ** của hệ thống, đồng thời cung cấp lệnh ADB dự phòng. Đây là giới hạn quyền Android/HyperOS; **v4.3 không thể vượt quyền bảo mật**.
-- Tự kiểm tra khi BOOT_COMPLETED và lịch 15 / 45 / 85 giây giữ nguyên, có thể bị HyperOS trì hoãn.
+Ứng dụng dành cho Xiaomi 13 Ultra (HyperOS 3 ROM Trung Quốc) và các máy đã xác nhận lệnh ADB dưới đây có tác dụng. Giữ nguyên package **com.ldd.geminirestore** để có thể nâng cấp.
+
+## Chức năng còn lại
+
+- Bật/tắt tự khôi phục nhấn giữ **Home → Gemini**.
+- Kiểm tra giá trị `Settings.System.long_press_home_key`. Nếu đã là `launch_google_search`, không ghi lại.
+- Thử sửa ngay và sau BOOT_COMPLETED; kiểm tra thêm tại 15, 45, 85 giây (dừng nếu đã quá 90 giây). Thời điểm thực tế phụ thuộc hạn chế chạy nền của HyperOS.
+- Hiển thị trạng thái, mở màn hình cấp `WRITE_SETTINGS`, và sao chép lệnh ADB dự phòng.
+
+## Đã bỏ
+
+Không còn nút chuyển Gemini/MiCTS, đổi trợ lý mặc định, khôi phục nút nguồn, quyền `WRITE_SECURE_SETTINGS`, dữ liệu Google VoiceInteraction và các thao tác liên quan MiCTS. **Không gỡ Xiao AI.**
+
+## Sử dụng
+
+1. Cài bản v4.4, mở ứng dụng, bật **Tự khôi phục Home → Gemini**.
+2. Cấp **Sửa cài đặt hệ thống** nếu được yêu cầu.
+3. Trong HyperOS, bật **Tự khởi động**, đặt pin thành **Không hạn chế**.
+4. Khởi động lại máy và thử nhấn giữ Home. Dùng **Kiểm tra & khôi phục ngay** để xem kết quả.
+
+Nếu HyperOS chặn ứng dụng thường (ví dụ `IllegalArgumentException`), app **không thể bảo đảm tự phục hồi** dù ADB trên máy tính làm được. Lệnh dự phòng:
 
 ```bat
 adb shell settings get system long_press_home_key
 adb shell settings put system long_press_home_key launch_google_search
 ```
 
-**Nâng cấp từ v4.2:** APK debug trên GitHub Actions có thể được ký bằng khóa khác nhau; khi gặp xung đột chữ ký, cần gỡ bản cũ rồi cài v4.3. Gỡ cài đặt sẽ xóa lựa chọn lưu trong ứng dụng.
-
----
-
-# Gemini Restore v4.2 — Thêm tự khôi phục nút Home
-
-## Khôi phục nhấn giữ Home → Gemini (HyperOS 3 ROM Trung Quốc)
-
-1. Cài Gemini Restore v4.2, mở ứng dụng.
-2. Nhấn **BẬT tự khôi phục Home → Gemini**.
-3. Khi được hỏi, cấp quyền **Sửa cài đặt hệ thống** (Modify system settings, WRITE_SETTINGS), rồi quay lại app.
-4. Ứng dụng sẽ thử ghi và xác minh giá trị `Settings.System.long_press_home_key = launch_google_search`.
-5. Bật **Tự khởi động** và chọn pin **Không hạn chế** cho Gemini Restore trong HyperOS.
-6. Khi khởi động lại, app thử khôi phục ngay tại BOOT_COMPLETED và lần lượt khoảng 15/45/85 giây. Jobs có thể chạy trễ nếu ROM hạn chế chạy nền.
-
-Bật/tắt tự khôi phục Home độc lập với chế độ trợ lý Gemini/MiCTS của nút nguồn. Nút **TẮT** chỉ ngừng tự khôi phục, không sửa lại cài đặt Home đã áp dụng. Không gỡ Xiao AI.
-
-Nếu Xiaomi vẫn từ chối quyền ứng dụng, lệnh ADB dự phòng là:
-
-```bat
-adb shell settings put system long_press_home_key launch_google_search
-```
-
-**Cảnh báo:** ADB chạy thành công không chứng minh ứng dụng thường có thể ghi cùng thiết lập; chỉ coi là hoạt động khi app báo đã ghi thành công và thử Home thực tế sau reboot. Quyền WRITE_SETTINGS khác với WRITE_SECURE_SETTINGS (đổi trợ lý mặc định Gemini/MiCTS), nên chức năng Home có thể dùng được ngay cả khi HyperOS chặn lệnh `pm grant WRITE_SECURE_SETTINGS`. Phải chọn Google/Gemini làm trợ lý mặc định.
-
-**Bản APK**: GitHub Actions → *Build Gemini Restore Switch APK* → Artifacts → *Gemini-Restore-v4.2-Home-APK*. Cần giải nén ZIP để lấy APK. Nếu cập nhật APK bị báo xung đột chữ ký, phải gỡ bản trước rồi mới cài bản mới (không bảo đảm giữ dữ liệu ứng dụng).
-
----
-
-# Gemini Restore v4.1 — Giữ chế độ Gemini/MiCTS sau khởi động
-
-- Chỉ **một** ứng dụng `com.ldd.geminirestore` để đổi trợ lý. Không cần MiCTS Keeper riêng.
-- Khi nhấn **Chuyển sang Gemini** hoặc **Chuyển sang MiCTS**, app lưu chế độ **chỉ sau khi đọc lại hệ thống xác nhận đã đổi thành công**.
-- Nếu chuyển bằng lệnh ADB ở CMD bên ngoài, hãy vào app và nhấn **Ghi nhớ chế độ đang sử dụng** để đồng bộ lựa chọn.
-- Sau BOOT_COMPLETED, thử giữ chế độ trước đó ở mốc 15 / 45 / 85 giây rồi **dừng trước 90 giây**. Android JobScheduler có thể thực hiện trễ/không chạy nếu ROM giới hạn nền.
-- Nếu trợ lý vẫn đang ở lựa chọn đúng, không ghi lại thiết lập.
-- Với Gemini: khôi phục Google Assistant component đã lưu nếu cần.
-- Với MiCTS: chỉ khôi phục khi Google `voice_interaction_service` hiện diện. Nếu Google VIS không có/kết nối chưa xong, app không cưỡng ép MiCTS; hiển thị cảnh báo để tránh lặp lỗi MiCTS không gọi Circle to Search sau khởi động.
-
-## Cấp quyền một lần (nếu HyperOS cho phép)
-
-```bat
-adb shell pm grant com.ldd.geminirestore android.permission.WRITE_SECURE_SETTINGS
-```
-
-Mở Cài đặt → Ứng dụng → Gemini Restore, bật **Tự khởi động** và **Không hạn chế pin**.
-
-Nếu ADB `pm grant` bị chặn bởi ROM, app không thể tự thay đổi Secure Settings. Cần chuyển bằng lệnh ADB trong CMD và sau khi khởi động lại không bảo đảm tự khôi phục.
-
-## Giới hạn của MiCTS trên HyperOS
-
-MiCTS VIS không root cần **Google** là trợ lý mặc định để xử lý Circle to Search: https://github.com/parallelcc/MiCTS/blob/main/README_en.md
-
-Ghi `Settings.Secure.assistant` sang Activity MiCTS để nhấn giữ nút nguồn là **workaround không chính thức** và có thể khiến Google VIS không được bind lại khi reboot. Vì vậy, **không thể cam kết MiCTS luôn vừa được gọi bằng nút nguồn vừa chạy Circle to Search sau reboot** chỉ với quyền ADB này. Khi bị lỗi, chuyển Digital Assistant về **Google** và kích hoạt MiCTS qua Quick Settings Tile hoặc app launcher.
-
-## Nâng cấp
-
-- VersionCode 41 / v4.1.0, package vẫn `com.ldd.geminirestore`.
-- Cài đè lên v4.0 nếu chữ ký APK trùng nhau. Nếu không, gỡ bản cũ và cài lại, sau đó cấp lại quyền ADB.
-- Tắt và gỡ MiCTS Keeper v1.x cũ nếu còn tự sửa trợ lý để tránh giành thiết lập.
+Bản mới được build và đưa lên mục Releases của repository. Nếu APK cũ không cùng chữ ký và báo xung đột, cần gỡ phiên bản cũ trước khi cài (làm mất cài đặt trong app).
