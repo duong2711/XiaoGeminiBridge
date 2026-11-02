@@ -1,34 +1,31 @@
-# Gemini Restore v4.0 — Chuyển Gemini / MiCTS
+# Gemini Restore v4.1 — Giữ chế độ Gemini/MiCTS sau khởi động
 
-Một app `com.ldd.geminirestore` với hai nút chuyển chế độ; không root.
+- Chỉ **một** ứng dụng `com.ldd.geminirestore` để đổi trợ lý. Không cần MiCTS Keeper riêng.
+- Khi nhấn **Chuyển sang Gemini** hoặc **Chuyển sang MiCTS**, app lưu chế độ **chỉ sau khi đọc lại hệ thống xác nhận đã đổi thành công**.
+- Nếu chuyển bằng lệnh ADB ở CMD bên ngoài, hãy vào app và nhấn **Ghi nhớ chế độ đang sử dụng** để đồng bộ lựa chọn.
+- Sau BOOT_COMPLETED, thử giữ chế độ trước đó ở mốc 15 / 45 / 85 giây rồi **dừng trước 90 giây**. Android JobScheduler có thể thực hiện trễ/không chạy nếu ROM giới hạn nền.
+- Nếu trợ lý vẫn đang ở lựa chọn đúng, không ghi lại thiết lập.
+- Với Gemini: khôi phục Google Assistant component đã lưu nếu cần.
+- Với MiCTS: chỉ khôi phục khi Google `voice_interaction_service` hiện diện. Nếu Google VIS không có/kết nối chưa xong, app không cưỡng ép MiCTS; hiển thị cảnh báo để tránh lặp lỗi MiCTS không gọi Circle to Search sau khởi động.
 
-## Giới hạn quan trọng
-- MiCTS (không root, VIS) **yêu cầu Google làm trợ lý mặc định**: https://github.com/parallelcc/MiCTS/blob/main/README_en.md
-- Vì vậy việc ghi `Settings.Secure.assistant` thành Activity MiCTS chỉ là thử nghiệm cho phím nguồn HyperOS; có thể khiến Circle to Search lỗi. Nếu không được, trở lại Google và kích hoạt MiCTS bằng tile Quick Settings.
-- Không thể đổi thiết lập bảo mật trực tiếp từ app nếu HyperOS không cấp `WRITE_SECURE_SETTINGS`; **KHÔNG** khẳng định chỉ cần ADB grant là được. Khi bị từ chối phải dùng lệnh ADB từ máy tính.
-- Phiên bản này không ghi `voice_interaction_service` và không sửa `power_button_long_press`.
+## Cấp quyền một lần (nếu HyperOS cho phép)
 
-## Cài đặt
-1. Chọn Google làm Digital Assistant và thử Gemini trước khi mở Gemini Restore để ứng dụng lưu thành phần trợ lý Google chính xác.
-2. Cài MiCTS.
-3. Cài APK Gemini Restore v4.0. Tên package trùng bản cũ, nhưng nếu chữ ký APK khác, bạn phải gỡ bản cũ rồi cài v4.0.
-4. Thử cấp quyền (nếu ROM cho phép):
 ```bat
 adb shell pm grant com.ldd.geminirestore android.permission.WRITE_SECURE_SETTINGS
 ```
-5. Chọn Gemini hoặc MiCTS bằng các nút trong app; app chỉ báo thành công nếu đọc lại thấy giá trị thực tế đã đổi.
 
-Nếu không cấp quyền được, mở CMD ở platform-tools và thử:
-```bat
-adb shell settings put secure assistant com.parallelc.micts/com.parallelc.micts.ui.activity.MainActivity
-adb shell settings put secure assistant com.google.android.googlequicksearchbox/com.google.android.voiceinteraction.GsaVoiceInteractionService
-```
-Lệnh Google bên trên là **giá trị phổ biến**, hãy ưu tiên giá trị trợ lý Google mà ứng dụng đã lưu.
+Mở Cài đặt → Ứng dụng → Gemini Restore, bật **Tự khởi động** và **Không hạn chế pin**.
 
-## Sau reboot
-- Chỉ lên lịch 15 / 45 / 90 giây (best effort qua JobScheduler, không phải mốc chính xác).
-- Chế độ Gemini có thể tự khôi phục trong 90 giây nếu app có quyền, tùy chọn bật/tắt.
-- Chế độ MiCTS chỉ kiểm tra, không tự ghi sau reboot do lỗi của MiCTS Keeper v1.1.
-- Tắt/gỡ MiCTS Keeper cũ nếu nó còn đang tự ép MiCTS.
+Nếu ADB `pm grant` bị chặn bởi ROM, app không thể tự thay đổi Secure Settings. Cần chuyển bằng lệnh ADB trong CMD và sau khi khởi động lại không bảo đảm tự khôi phục.
 
-**Phiên bản thử nghiệm: cần kiểm tra trên Xiaomi HyperOS 3 thật.**
+## Giới hạn của MiCTS trên HyperOS
+
+MiCTS VIS không root cần **Google** là trợ lý mặc định để xử lý Circle to Search: https://github.com/parallelcc/MiCTS/blob/main/README_en.md
+
+Ghi `Settings.Secure.assistant` sang Activity MiCTS để nhấn giữ nút nguồn là **workaround không chính thức** và có thể khiến Google VIS không được bind lại khi reboot. Vì vậy, **không thể cam kết MiCTS luôn vừa được gọi bằng nút nguồn vừa chạy Circle to Search sau reboot** chỉ với quyền ADB này. Khi bị lỗi, chuyển Digital Assistant về **Google** và kích hoạt MiCTS qua Quick Settings Tile hoặc app launcher.
+
+## Nâng cấp
+
+- VersionCode 41 / v4.1.0, package vẫn `com.ldd.geminirestore`.
+- Cài đè lên v4.0 nếu chữ ký APK trùng nhau. Nếu không, gỡ bản cũ và cài lại, sau đó cấp lại quyền ADB.
+- Tắt và gỡ MiCTS Keeper v1.x cũ nếu còn tự sửa trợ lý để tránh giành thiết lập.

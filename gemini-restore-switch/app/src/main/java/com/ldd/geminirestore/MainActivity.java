@@ -33,7 +33,8 @@ public class MainActivity extends Activity {
   private static final String GOOGLE_FALLBACK=GOOGLE+"/com.google.android.voiceinteraction.GsaVoiceInteractionService";
   private static final String MICTS="com.parallelc.micts/com.parallelc.micts.ui.activity.MainActivity";
   private static final String GEMINI="gemini", CIRCLE="micts";
-  private static final long[] CHECKS={15000,45000,90000};
+  private static final long[] CHECKS={15000,45000,85000};
+  private static final long BOOT_WINDOW_MS=90000;
   private static final int JOB=6240;
   private TextView status,guide;
   private LinearLayout layout;
@@ -114,16 +115,25 @@ public class MainActivity extends Activity {
   }
   private static void check(Context c){
     String mode=pref(c).getString("mode",GEMINI);
+    String active=read(c,"assistant");
     if(CIRCLE.equals(mode)){
-      // Deliberately DO NOT force MiCTS on reboot; this broke Google VIS on HyperOS.
-      log(c,"MiCTS: kiểm tra sau reboot; không ghi đè trợ lý để giữ Google VIS.");
-      return;
+      if(MICTS.equals(active)){
+        String vis=read(c,"voice_interaction_service");
+        log(c,google(vis)?"MiCTS vẫn được chọn sau khởi động.":"MiCTS được chọn nhưng Google VIS chưa sẵn sàng; Circle to Search có thể lỗi.");
+        return;
+      }
+      // MiCTS on Android without root needs Google's Voice Interaction Service.
+      // Never force MiCTS if Google VIS is absent: this could break the trigger.
+      String vis=read(c,"voice_interaction_service");
+      if(!google(vis)){
+        log(c,"HyperOS đã đổi trợ lý nhưng Google VIS chưa kết nối. Không ép MiCTS để tránh lỗi Circle to Search; hãy chọn lại Google rồi thử.");
+        return;
+      }
+      change(c,CIRCLE,true);
+    }else{
+      if(google(active)){capture(c);log(c,"Gemini vẫn được chọn sau khởi động.");}
+      else change(c,GEMINI,true);
     }
-    if(!pref(c).getBoolean("auto_gemini",true)){
-      log(c,"Tự khôi phục Gemini đang tắt.");return;
-    }
-    if(google(read(c,"assistant"))){capture(c);log(c,"Gemini vẫn là trợ lý.");}
-    else change(c,GEMINI,true);
   }
   public static class BootReceiver extends BroadcastReceiver{
     @Override public void onReceive(Context c,Intent i){
@@ -137,7 +147,7 @@ public class MainActivity extends Activity {
         try{
           long start=pref(this).getLong("boot_elapsed",-1L);
           long d=SystemClock.elapsedRealtime()-start;
-          if(start>=0&&d>=0&&d<=90000)check(this);
+          if(start>=0&&d>=0&&d<=BOOT_WINDOW_MS)check(this);
         }finally{jobFinished(p,false);}
       },"RestoreCheck").start();
       return true;
@@ -167,6 +177,20 @@ public class MainActivity extends Activity {
       .setPositiveButton("Đóng",null).show();
     else Toast.makeText(this,"Đã lưu thiết lập. Hãy thử giữ nút nguồn.",Toast.LENGTH_LONG).show();
   }
+  private void rememberCurrent(){
+    String active=read(this,"assistant");
+    String mode=MICTS.equals(active)?CIRCLE:google(active)?GEMINI:null;
+    if(mode==null){
+      new AlertDialog.Builder(this).setTitle("Không nhận diện được")
+        .setMessage("Assistant hiện tại không phải Google/Gemini hoặc MiCTS. Hãy chọn chế độ trước.")
+        .setPositiveButton("Đóng",null).show();
+      return;
+    }
+    if(GEMINI.equals(mode))capture(this);
+    pref(this).edit().putString("mode",mode).apply();
+    log(this,"Đã ghi nhớ lựa chọn hiện tại: "+(CIRCLE.equals(mode)?"MiCTS":"Gemini"));
+    update();
+  }
   private void settings(){
     try{startActivity(new Intent("android.settings.VOICE_INPUT_SETTINGS"));}
     catch(Exception e){startActivity(new Intent(Settings.ACTION_SETTINGS));}
@@ -190,17 +214,17 @@ public class MainActivity extends Activity {
     String mode=pref(this).getString("mode",GEMINI);
     long at=pref(this).getLong("at",0);
     String stamp=at==0?"Chưa chạy":DateFormat.getDateTimeInstance().format(new Date(at));
-    status.setText("Bạn chọn: "+(CIRCLE.equals(mode)?"MiCTS":"Gemini")+
+    status.setText("Chế độ ghi nhớ (sau reboot): "+(CIRCLE.equals(mode)?"MiCTS":"Gemini")+
       "\nQuyền hệ thống: "+(grant(this)?"Có":"Không có / ROM chặn")+
       "\n\nAssistant hiện tại:\n"+String.valueOf(read(this,"assistant"))+
       "\n\nGoogle VoiceInteraction:\n"+String.valueOf(read(this,"voice_interaction_service"))+
       "\n\nGiá trị Google đã lưu:\n"+original(this)+
       "\n\nCập nhật: "+stamp+"\n"+pref(this).getString("result","Chưa thao tác"));
-    guide.setText("Khởi động lại: kiểm tra tại ~15 / 45 / 90 giây, rồi dừng. "+
-      "Chế độ Gemini có thể tự khôi phục nếu được cấp quyền. "+
-      "Chế độ MiCTS không tự ghi lại sau reboot để tránh lỗi Google VIS.\n\n"+
-      "MiCTS không root hỗ trợ tốt nhất khi Google vẫn là Digital Assistant; "+
-      "bạn có thể kích hoạt qua ô Cài đặt nhanh.");
+    guide.setText("Sau reboot: tự kiểm tra khoảng 15 / 45 / 85 giây (dừng trước 90 giây). "+
+      "Giữ chế độ Gemini hoặc MiCTS đã được chọn và ghi nhớ trước đó. "+
+      "Nếu MiCTS mất kết nối Google VIS, app sẽ không cưỡng ép thay đổi gây lỗi; mở Google rồi chọn lại Google làm trợ lý.\n\n"+
+      "Khôi phục cần quyền WRITE_SECURE_SETTINGS và được HyperOS cho chạy sau reboot. "+
+      "MiCTS không root có thể không hoạt động khi bị đặt thành trợ lý mặc định.");
   }
   @Override public void onCreate(Bundle b){
     super.onCreate(b);
@@ -224,15 +248,16 @@ public class MainActivity extends Activity {
     button("Sao chép ADB chuyển sang Gemini",0xff394457,()->copy(GEMINI));
     button("Sao chép ADB chuyển sang MiCTS",0xff394457,()->copy(CIRCLE));
     button("Kiểm tra lại",0xff394457,()->{capture(this);update();});
-    button("Bật / tắt tự khôi phục Gemini",0xff394457,()->{
-      boolean b0=!pref(this).getBoolean("auto_gemini",true);
-      pref(this).edit().putBoolean("auto_gemini",b0).apply();
-      Toast.makeText(this,"Tự khôi phục Gemini: "+(b0?"Bật":"Tắt"),Toast.LENGTH_SHORT).show();update();
-    });
+    button("Ghi nhớ chế độ đang sử dụng (khi đổi bằng ADB)",0xff394457,this::rememberCurrent);
     guide=tv("",13,0xffb2bfd3);guide.setPadding(0,dp(20),0,0);layout.addView(guide);
     TextView help=tv("ADB (nếu HyperOS cho phép):\nadb shell pm grant com.ldd.geminirestore android.permission.WRITE_SECURE_SETTINGS\n\n"+
        "Nếu báo Permission denial, dùng lệnh ADB thủ công; app không thể tự vượt quyền hệ thống.",13,0xffb2bfd3);
     help.setPadding(0,dp(16),0,0);layout.addView(help);
+    // First launch: remember the mode currently configured on this device.
+    if(!pref(this).contains("mode")){
+      String a=read(this,"assistant");
+      pref(this).edit().putString("mode",MICTS.equals(a)?CIRCLE:GEMINI).apply();
+    }
     capture(this);update();
   }
   @Override protected void onResume(){super.onResume();if(status!=null)update();}
