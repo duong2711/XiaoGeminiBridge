@@ -243,9 +243,9 @@ public class MainActivity extends Activity {
     long at=pref(this).getLong("at",0);
     String stamp=at==0?"Chưa chạy":DateFormat.getDateTimeInstance().format(new Date(at));
     status.setText("Home → Gemini: "+(HomeRestore.enabled(this)?"BẬT tự khôi phục":"TẮT tự khôi phục")+
-      "\\nQuyền WRITE_SETTINGS: "+(HomeRestore.hasWritePermission(this)?"Đã cấp":"Chưa cấp")+
-      "\\nGiá trị Home: "+String.valueOf(HomeRestore.current(this))+
-      "\\nKết quả Home: "+HomeRestore.lastResult(this)+"\\n\\n"+
+      "\nQuyền WRITE_SETTINGS: "+(HomeRestore.hasWritePermission(this)?"Đã cấp":"Chưa cấp")+
+      "\nGiá trị Home: "+String.valueOf(HomeRestore.current(this))+
+      "\nKết quả Home: "+HomeRestore.lastResult(this)+"\n\n"+
       "Chế độ ghi nhớ (sau reboot): "+(CIRCLE.equals(mode)?"MiCTS":"Gemini")+
       "\nQuyền hệ thống: "+(grant(this)?"Có":"Không có / ROM chặn")+
       "\n\nAssistant hiện tại:\n"+String.valueOf(read(this,"assistant"))+
