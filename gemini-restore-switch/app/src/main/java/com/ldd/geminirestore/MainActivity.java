@@ -32,6 +32,7 @@ public class MainActivity extends Activity {
 
   private TextView status;
   private Switch autoSwitch;
+  private Switch assistantSwitch;
   private LinearLayout content;
 
   private static android.content.SharedPreferences schedulePrefs(Context context) {
@@ -46,7 +47,7 @@ public class MainActivity extends Activity {
 
   private static void scheduleChecks(Context context) {
     cancelChecks(context);
-    if (!HomeRestore.enabled(context)) return;
+    if (!HomeRestore.enabled(context) && !AssistantRefresh.enabled(context)) return;
     JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
     if (scheduler == null) return;
     schedulePrefs(context).edit().putLong("boot_elapsed", SystemClock.elapsedRealtime()).apply();
@@ -67,8 +68,11 @@ public class MainActivity extends Activity {
       if (Intent.ACTION_BOOT_COMPLETED.equals(action)
           || Intent.ACTION_USER_UNLOCKED.equals(action)
           || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
-        if (HomeRestore.enabled(context)) {
-          HomeRestore.restore(context);
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
+          AssistantRefresh.onBoot(context);
+        }
+        if (HomeRestore.enabled(context) || AssistantRefresh.enabled(context)) {
+          if (HomeRestore.enabled(context)) HomeRestore.restore(context);
           scheduleChecks(context);
         } else {
           cancelChecks(context);
@@ -83,9 +87,9 @@ public class MainActivity extends Activity {
         try {
           long start = schedulePrefs(this).getLong("boot_elapsed", -1L);
           long elapsed = SystemClock.elapsedRealtime() - start;
-          if (HomeRestore.enabled(this) && start >= 0L
-              && elapsed >= 0L && elapsed <= MAX_BOOT_WINDOW_MS) {
-            HomeRestore.restore(this);
+          if (start >= 0L && elapsed >= 0L && elapsed <= MAX_BOOT_WINDOW_MS) {
+            if (HomeRestore.enabled(this)) HomeRestore.restore(this);
+            if (AssistantRefresh.pending(this)) AssistantRefresh.refresh(this);
           }
         } finally {
           jobFinished(params, false);
@@ -135,14 +139,19 @@ public class MainActivity extends Activity {
         "Tự khôi phục: " + (HomeRestore.enabled(this) ? "BẬT" : "TẮT")
         + "\nQuyền sửa cài đặt: " + (HomeRestore.hasWritePermission(this) ? "Đã cấp" : "Chưa cấp")
         + "\nGiá trị Home: " + currentLabel
+        + "\nGoogle sau khởi động: " + (AssistantRefresh.enabled(this) ? "BẬT" : "TẮT")
+        + "\nQuyền WRITE_SECURE_SETTINGS: "
+        + (AssistantRefresh.permitted(this) ? "Đã cấp ADB" : "Chưa cấp")
+        + "\n" + AssistantRefresh.lastResult(this)
         + "\n\n" + HomeRestore.lastResult(this));
     autoSwitch.setChecked(HomeRestore.enabled(this));
+    if (assistantSwitch != null) assistantSwitch.setChecked(AssistantRefresh.enabled(this));
   }
 
   private void enable(boolean enabled) {
     HomeRestore.setEnabled(this, enabled);
     if (!enabled) {
-      cancelChecks(this);
+      if (!AssistantRefresh.enabled(this)) cancelChecks(this);
       Toast.makeText(this, "Đã tắt tự khôi phục Home.", Toast.LENGTH_SHORT).show();
     } else if (!HomeRestore.hasWritePermission(this) && !HomeRestore.isActive(this)) {
       new AlertDialog.Builder(this)
@@ -165,6 +174,51 @@ public class MainActivity extends Activity {
     boolean ok = HomeRestore.restore(this);
     updateStatus();
     Toast.makeText(this, ok ? "Giá trị Home đã đúng." : "Chưa khôi phục được. Xem trạng thái.", Toast.LENGTH_LONG).show();
+  }
+
+  private void enableAssistant(boolean enabled) {
+    AssistantRefresh.setEnabled(this, enabled);
+    if (enabled) {
+      scheduleChecks(this);
+      if (!AssistantRefresh.permitted(this)) {
+        new AlertDialog.Builder(this)
+            .setTitle("Cần cấp quyền ADB một lần")
+            .setMessage("Để tự làm mới Google trong Default digital assistant app sau reboot, "
+                + "APK cần WRITE_SECURE_SETTINGS. Android không cho cấp quyền này "
+                + "bằng nút trong ứng dụng. Bấm Sao chép lệnh cấp quyền rồi chạy trong CMD "
+                + "khi điện thoại kết nối USB.")
+            .setPositiveButton("Đã hiểu", null).show();
+      } else {
+        new Thread(() -> {
+          AssistantRefresh.refresh(this);
+          runOnUiThread(this::updateStatus);
+        }, "AssistantRefreshManual").start();
+      }
+    } else if (!HomeRestore.enabled(this)) {
+      cancelChecks(this);
+    }
+    updateStatus();
+  }
+
+  private void refreshAssistantNow() {
+    if (!AssistantRefresh.enabled(this)) {
+      Toast.makeText(this, "Hãy bật tự làm mới Google trước.", Toast.LENGTH_LONG).show();
+      return;
+    }
+    new Thread(() -> {
+      AssistantRefresh.refresh(this);
+      runOnUiThread(() -> {
+        updateStatus();
+        Toast.makeText(this, AssistantRefresh.lastResult(this), Toast.LENGTH_LONG).show();
+      });
+    }, "AssistantRefreshManual").start();
+  }
+
+  private void copyGrant() {
+    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+    clipboard.setPrimaryClip(ClipData.newPlainText(
+        "Grant secure settings", AssistantRefresh.grantCommand(this)));
+    Toast.makeText(this, "Đã sao chép lệnh ADB cấp quyền.", Toast.LENGTH_SHORT).show();
   }
 
   private void copyAdb() {
@@ -204,6 +258,20 @@ public class MainActivity extends Activity {
       if (HomeRestore.enabled(this) != checked) enable(checked);
     });
 
+    assistantSwitch = new Switch(this);
+    assistantSwitch.setText("Tự làm mới Google sau khi khởi động");
+    assistantSwitch.setTextSize(16);
+    assistantSwitch.setTextColor(Color.WHITE);
+    assistantSwitch.setPadding(dp(14), dp(14), dp(14), dp(14));
+    assistantSwitch.setBackground(background(0xff223249));
+    assistantSwitch.setChecked(AssistantRefresh.enabled(this));
+    LinearLayout.LayoutParams assistantParams = new LinearLayout.LayoutParams(-1, -2);
+    assistantParams.topMargin = dp(12);
+    content.addView(assistantSwitch, assistantParams);
+    assistantSwitch.setOnCheckedChangeListener((view, checked) -> {
+      if (AssistantRefresh.enabled(this) != checked) enableAssistant(checked);
+    });
+
     status = text("", 14, 0xffdce6f6);
     status.setPadding(dp(14), dp(17), dp(14), dp(17));
     LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
@@ -211,13 +279,19 @@ public class MainActivity extends Activity {
     status.setBackground(background(0xff223249));
     content.addView(status, statusParams);
 
-    addButton("Kiểm tra & khôi phục ngay", 0xff2563c6, this::checkNow);
+    addButton("Kiểm tra & khôi phục Home", 0xff2563c6, this::checkNow);
+    addButton("Làm mới Google ngay (thử nghiệm)", 0xff2563c6, this::refreshAssistantNow);
+    addButton("Sao chép lệnh cấp quyền trợ lý bằng ADB", 0xff32546b, this::copyGrant);
     addButton("Cấp quyền sửa cài đặt", 0xff32546b, () -> HomeRestore.openPermissionScreen(this));
     addButton("Sao chép lệnh ADB dự phòng", 0xff324157, this::copyAdb);
 
     TextView note = text(
         "BẢN THỬ NGHIỆM: chỉ cài bằng ADB; sử dụng targetSdk 22 nên giảm lớp bảo vệ tương thích/bảo mật của Android.\n\n"
-        + "Ứng dụng chỉ xử lý thao tác nhấn giữ Home, không chỉnh các cài đặt trợ lý khác.\n\n"
+        + "Khi bật tự làm mới Google, sau mỗi lần khởi động APK thử chuyển "
+        + "trợ lý Google sang None rồi trả lại giá trị chính xác ban đầu, "
+        + "không tự chọn Google nếu bạn đang dùng MiCTS. "
+        + "Cần ADB một lần để cấp WRITE_SECURE_SETTINGS. "
+        + "Chưa bảo đảm tương đương thao tác đổi trong Settings.\n\n"
         + "Sau khởi động, ứng dụng thử khôi phục ngay và kiểm tra lại tối đa 90 giây. "
         + "Hãy bật Tự khởi động và chọn Không hạn chế pin trong HyperOS.\n\n"
         + "Nếu xuất hiện IllegalArgumentException hoặc SecurityException, HyperOS có thể "
