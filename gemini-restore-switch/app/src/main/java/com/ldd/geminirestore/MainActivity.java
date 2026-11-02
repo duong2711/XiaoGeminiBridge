@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
       if (!HomeRestore.enabled(context)) return false;
       boolean homeRestored = HomeRestore.restore(context);
       if (homeRestored && AssistantRefresh.enabled(context)) {
-        AssistantRefresh.refresh(context);
+        AssistantUiService.request(context);
       }
       return homeRestored;
     }
@@ -92,6 +92,10 @@ public class MainActivity extends Activity {
   public static final class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
       String action = intent.getAction();
+      if (Intent.ACTION_USER_PRESENT.equals(action)) {
+        AssistantUiService.afterUnlock(context);
+        return;
+      }
       if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
           && !Intent.ACTION_USER_UNLOCKED.equals(action)
           && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
@@ -184,9 +188,8 @@ public class MainActivity extends Activity {
         + "\nQuyền sửa cài đặt: " + (HomeRestore.hasWritePermission(this) ? "Đã cấp" : "Chưa cấp")
         + "\nGiá trị Home: " + currentLabel
         + "\nGoogle sau khởi động: " + (AssistantRefresh.enabled(this) ? "BẬT" : "TẮT")
-        + "\nQuyền WRITE_SECURE_SETTINGS: "
-        + (AssistantRefresh.permitted(this) ? "Đã cấp ADB" : "Chưa cấp")
-        + "\n" + AssistantRefresh.lastResult(this)
+        + "\nAccessibility: " + (AssistantUiService.connected() ? "Đã kết nối" : "Chưa kết nối")
+        + "\n" + AssistantUiService.lastResult(this)
         + "\n\n" + HomeRestore.lastResult(this));
     autoSwitch.setChecked(HomeRestore.enabled(this));
     if (assistantSwitch != null) assistantSwitch.setChecked(AssistantRefresh.enabled(this));
@@ -233,17 +236,19 @@ public class MainActivity extends Activity {
   private void enableAssistant(boolean enabled) {
     AssistantRefresh.setEnabled(this, enabled);
     if (enabled) {
-      if (!AssistantRefresh.permitted(this)) {
+      if (!AssistantUiService.connected()) {
         new AlertDialog.Builder(this)
-            .setTitle("Cần cấp quyền ADB một lần")
-            .setMessage("Để tự làm mới Google trong Default digital assistant app sau reboot, "
-                + "APK cần WRITE_SECURE_SETTINGS. Android không cho cấp quyền này "
-                + "bằng nút trong ứng dụng. Bấm Sao chép lệnh cấp quyền rồi chạy trong CMD "
-                + "khi điện thoại kết nối USB.")
-            .setPositiveButton("Đã hiểu", null).show();
+            .setTitle("Bật Trợ năng để đổi Google bằng giao diện thật")
+            .setMessage("Cách ghi Secure Settings trước đây không có tác dụng trên HyperOS. "
+                + "Bản mới cần bạn tự bật dịch vụ Trợ năng Gemini Home. "
+                + "Dịch vụ có thể đọc nội dung màn hình để tìm đúng các nút None và Google "
+                + "trong ứng dụng Cài đặt. Chỉ bật nếu bạn đồng ý cấp quyền này. "
+                + "Sau khi mở khóa, quá trình có thể đưa màn hình Cài đặt ra phía trước.")
+            .setPositiveButton("Mở Trợ năng", (d,w) -> AssistantUiService.openPermission(this))
+            .setNegativeButton("Để sau", null).show();
       } else {
         Toast.makeText(this,
-            "Google sẽ được làm mới ngay sau mỗi lượt khôi phục Home.",
+            "Đã bật thao tác None → Google thực qua Settings sau mỗi lượt Home.",
             Toast.LENGTH_LONG).show();
       }
     } else if (!HomeRestore.enabled(this)) {
@@ -257,20 +262,9 @@ public class MainActivity extends Activity {
       Toast.makeText(this, "Hãy bật tự làm mới Google trước.", Toast.LENGTH_LONG).show();
       return;
     }
-    new Thread(() -> {
-      AssistantRefresh.refresh(this);
-      runOnUiThread(() -> {
-        updateStatus();
-        Toast.makeText(this, AssistantRefresh.lastResult(this), Toast.LENGTH_LONG).show();
-      });
-    }, "AssistantRefreshManual").start();
-  }
-
-  private void copyGrant() {
-    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-    clipboard.setPrimaryClip(ClipData.newPlainText(
-        "Grant secure settings", AssistantRefresh.grantCommand(this)));
-    Toast.makeText(this, "Đã sao chép lệnh ADB cấp quyền.", Toast.LENGTH_SHORT).show();
+    AssistantUiService.request(this);
+    updateStatus();
+    Toast.makeText(this, AssistantUiService.lastResult(this), Toast.LENGTH_LONG).show();
   }
 
   private void copyAdb() {
@@ -311,7 +305,7 @@ public class MainActivity extends Activity {
     });
 
     assistantSwitch = new Switch(this);
-    assistantSwitch.setText("Làm mới Google sau mỗi lượt khôi phục Home");
+    assistantSwitch.setText("Tự đổi None → Google thật sau mỗi lượt Home");
     assistantSwitch.setTextSize(16);
     assistantSwitch.setTextColor(Color.WHITE);
     assistantSwitch.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -332,18 +326,21 @@ public class MainActivity extends Activity {
     content.addView(status, statusParams);
 
     addButton("Khôi phục Home → làm mới Google ngay", 0xff2563c6, this::checkNow);
-    addButton("Làm mới Google ngay (thử nghiệm)", 0xff2563c6, this::refreshAssistantNow);
-    addButton("Sao chép lệnh cấp quyền trợ lý bằng ADB", 0xff32546b, this::copyGrant);
+    addButton("Thử đổi None → Google bằng Cài đặt", 0xff2563c6, this::refreshAssistantNow);
+    addButton("Bật quyền Trợ năng (Accessibility)", 0xff32546b,
+        () -> AssistantUiService.openPermission(this));
     addButton("Cấp quyền sửa cài đặt", 0xff32546b, () -> HomeRestore.openPermissionScreen(this));
     addButton("Sao chép lệnh ADB dự phòng", 0xff324157, this::copyAdb);
 
     TextView note = text(
         "BẢN THỬ NGHIỆM: chỉ cài bằng ADB; sử dụng targetSdk 22 nên giảm lớp bảo vệ tương thích/bảo mật của Android.\n\n"
-        + "Sau mỗi lượt khôi phục Home thành công, APK lập tức thử chuyển "
-        + "trợ lý Google sang None rồi trả lại giá trị chính xác ban đầu, "
-        + "không tự chọn Google nếu bạn đang dùng MiCTS. "
-        + "Cần ADB một lần để cấp WRITE_SECURE_SETTINGS. "
-        + "Chưa bảo đảm tương đương thao tác đổi trong Settings.\n\n"
+        + "Sau mỗi lượt Home thành công, nếu bạn đã cấp quyền Trợ năng, "
+        + "ứng dụng sẽ mở trang Default apps và thử BẤM None rồi Google "
+        + "thông qua giao diện thật của HyperOS. "
+        + "Không đổi MiCTS/None nếu Google chưa là trợ lý mặc định. "
+        + "Hoạt động này có thể làm gián đoạn ứng dụng trên màn hình "
+        + "và chỉ chạy sau khi đã mở khóa. "
+        + "Không có thao tác nền nào được bảo đảm khi HyperOS tắt dịch vụ Trợ năng.\n\n"
         + "Sau khởi động: Home → Google ngay; lặp lại cùng thứ tự ở các lượt "
         + "15, 45 và 85 giây nếu Home đã sẵn sàng. Tất cả trong cửa sổ "
         + "tối đa 90 giây (thời gian thực tế phụ thuộc HyperOS). "
