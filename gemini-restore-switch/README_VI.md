@@ -1,3 +1,28 @@
+# Gemini Restore v4.2 — Thêm tự khôi phục nút Home
+
+## Khôi phục nhấn giữ Home → Gemini (HyperOS 3 ROM Trung Quốc)
+
+1. Cài Gemini Restore v4.2, mở ứng dụng.
+2. Nhấn **BẬT tự khôi phục Home → Gemini**.
+3. Khi được hỏi, cấp quyền **Sửa cài đặt hệ thống** (Modify system settings, WRITE_SETTINGS), rồi quay lại app.
+4. Ứng dụng sẽ thử ghi và xác minh giá trị `Settings.System.long_press_home_key = launch_google_search`.
+5. Bật **Tự khởi động** và chọn pin **Không hạn chế** cho Gemini Restore trong HyperOS.
+6. Khi khởi động lại, app thử khôi phục ngay tại BOOT_COMPLETED và lần lượt khoảng 15/45/85 giây. Jobs có thể chạy trễ nếu ROM hạn chế chạy nền.
+
+Bật/tắt tự khôi phục Home độc lập với chế độ trợ lý Gemini/MiCTS của nút nguồn. Nút **TẮT** chỉ ngừng tự khôi phục, không sửa lại cài đặt Home đã áp dụng. Không gỡ Xiao AI.
+
+Nếu Xiaomi vẫn từ chối quyền ứng dụng, lệnh ADB dự phòng là:
+
+```bat
+adb shell settings put system long_press_home_key launch_google_search
+```
+
+**Cảnh báo:** ADB chạy thành công không chứng minh ứng dụng thường có thể ghi cùng thiết lập; chỉ coi là hoạt động khi app báo đã ghi thành công và thử Home thực tế sau reboot. Quyền WRITE_SETTINGS khác với WRITE_SECURE_SETTINGS (đổi trợ lý mặc định Gemini/MiCTS), nên chức năng Home có thể dùng được ngay cả khi HyperOS chặn lệnh `pm grant WRITE_SECURE_SETTINGS`. Phải chọn Google/Gemini làm trợ lý mặc định.
+
+**Bản APK**: GitHub Actions → *Build Gemini Restore Switch APK* → Artifacts → *Gemini-Restore-v4.2-Home-APK*. Cần giải nén ZIP để lấy APK. Nếu cập nhật APK bị báo xung đột chữ ký, phải gỡ bản trước rồi mới cài bản mới (không bảo đảm giữ dữ liệu ứng dụng).
+
+---
+
 # Gemini Restore v4.1 — Giữ chế độ Gemini/MiCTS sau khởi động
 
 - Chỉ **một** ứng dụng `com.ldd.geminirestore` để đổi trợ lý. Không cần MiCTS Keeper riêng.
