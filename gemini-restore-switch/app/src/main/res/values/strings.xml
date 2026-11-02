@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="assistant_accessibility_description">Chỉ khi bạn bật tự sửa Google: tìm ứng dụng trợ lý mặc định trong Settings và thử chuyển None rồi Google. Dịch vụ có thể đọc nội dung giao diện để xác định đúng nút. Không ghi âm, không gửi dữ liệu.</string>
+</resources>
