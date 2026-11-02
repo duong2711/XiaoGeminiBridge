@@ -21,7 +21,6 @@ import android.provider.Settings;
 public final class AssistantRefresh {
   private static final String PREFS = "assistant_refresh";
   private static final String ENABLED = "enabled";
-  private static final String PENDING = "pending";
   private static final String RESULT = "result";
   private static final String ASSISTANT = "assistant";
   private static final String VOICE = "voice_interaction_service";
@@ -38,20 +37,7 @@ public final class AssistantRefresh {
   }
 
   public static void setEnabled(Context c, boolean enabled) {
-    prefs(c).edit().putBoolean(ENABLED, enabled)
-        .putBoolean(PENDING, enabled).apply();
-  }
-
-  public static void onBoot(Context c) {
-    if (enabled(c)) {
-      prefs(c).edit().putBoolean(PENDING, true)
-          .putString(RESULT, "Đang chờ làm mới Google sau khi khởi động lại.")
-          .apply();
-    }
-  }
-
-  public static boolean pending(Context c) {
-    return enabled(c) && prefs(c).getBoolean(PENDING, false);
+    prefs(c).edit().putBoolean(ENABLED, enabled).apply();
   }
 
   public static boolean permitted(Context c) {
@@ -141,8 +127,7 @@ public final class AssistantRefresh {
     }
 
     if (success) {
-      prefs(c).edit().putBoolean(PENDING, false).apply();
-      result(c, "Đã làm mới lựa chọn Google trong Secure Settings."
+      result(c, "Đã thử làm mới Google ngay sau lượt khôi phục Home."
           + " Hãy thử giữ Home; cần kiểm nghiệm máy thật.");
     } else {
       result(c, "Không làm mới được Google: " + failure);
