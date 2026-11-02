@@ -114,6 +114,7 @@ public class MainActivity extends Activity {
     }
   }
   private static void check(Context c){
+    HomeRestore.restore(c);
     String mode=pref(c).getString("mode",GEMINI);
     String active=read(c,"assistant");
     if(CIRCLE.equals(mode)){
@@ -138,7 +139,10 @@ public class MainActivity extends Activity {
   public static class BootReceiver extends BroadcastReceiver{
     @Override public void onReceive(Context c,Intent i){
       if(Intent.ACTION_BOOT_COMPLETED.equals(i.getAction())||
-         Intent.ACTION_MY_PACKAGE_REPLACED.equals(i.getAction()))schedule(c);
+         Intent.ACTION_MY_PACKAGE_REPLACED.equals(i.getAction())){
+        HomeRestore.restore(c);
+        schedule(c);
+      }
     }
   }
   public static class RestoreService extends JobService{
@@ -210,18 +214,46 @@ public class MainActivity extends Activity {
      .setMessage(cmd+"\n\nChạy trong CMD tại platform-tools khi không thể cấp quyền trực tiếp.")
      .setPositiveButton("OK",null).show();
   }
+  private void toggleHome(boolean enabled){
+    HomeRestore.setEnabled(this,enabled);
+    if(enabled){
+      if(HomeRestore.hasWritePermission(this)){
+        boolean ok=HomeRestore.restore(this);
+        Toast.makeText(this,ok?"Đã đặt nhấn giữ Home → Gemini":"Không đổi được Home. Hãy xem trạng thái.",Toast.LENGTH_LONG).show();
+      }else{
+        new AlertDialog.Builder(this)
+          .setTitle("Cấp quyền Sửa cài đặt hệ thống")
+          .setMessage("Bật Cho phép sửa cài đặt hệ thống cho Gemini Restore. Quay lại app để tự áp dụng. Đây là quyền WRITE_SETTINGS, không phải WRITE_SECURE_SETTINGS.")
+          .setPositiveButton("Mở cài đặt",(d,w)->HomeRestore.openPermissionScreen(this))
+          .setNegativeButton("Để sau",null).show();
+      }
+    }else{
+      Toast.makeText(this,"Đã tắt TỰ KHÔI PHỤC Home. Thiết lập Home hiện tại không bị thay đổi.",Toast.LENGTH_LONG).show();
+    }
+    update();
+  }
+  private void copyHome(){
+    String cmd=HomeRestore.adbCommand();
+    ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+    cm.setPrimaryClip(ClipData.newPlainText("ADB Home",cmd));
+    Toast.makeText(this,"Đã sao chép lệnh ADB Home",Toast.LENGTH_SHORT).show();
+  }
   private void update(){
     String mode=pref(this).getString("mode",GEMINI);
     long at=pref(this).getLong("at",0);
     String stamp=at==0?"Chưa chạy":DateFormat.getDateTimeInstance().format(new Date(at));
-    status.setText("Chế độ ghi nhớ (sau reboot): "+(CIRCLE.equals(mode)?"MiCTS":"Gemini")+
+    status.setText("Home → Gemini: "+(HomeRestore.enabled(this)?"BẬT tự khôi phục":"TẮT tự khôi phục")+
+      "\\nQuyền WRITE_SETTINGS: "+(HomeRestore.hasWritePermission(this)?"Đã cấp":"Chưa cấp")+
+      "\\nGiá trị Home: "+String.valueOf(HomeRestore.current(this))+
+      "\\nKết quả Home: "+HomeRestore.lastResult(this)+"\\n\\n"+
+      "Chế độ ghi nhớ (sau reboot): "+(CIRCLE.equals(mode)?"MiCTS":"Gemini")+
       "\nQuyền hệ thống: "+(grant(this)?"Có":"Không có / ROM chặn")+
       "\n\nAssistant hiện tại:\n"+String.valueOf(read(this,"assistant"))+
       "\n\nGoogle VoiceInteraction:\n"+String.valueOf(read(this,"voice_interaction_service"))+
       "\n\nGiá trị Google đã lưu:\n"+original(this)+
       "\n\nCập nhật: "+stamp+"\n"+pref(this).getString("result","Chưa thao tác"));
     guide.setText("Sau reboot: tự kiểm tra khoảng 15 / 45 / 85 giây (dừng trước 90 giây). "+
-      "Giữ chế độ Gemini hoặc MiCTS đã được chọn và ghi nhớ trước đó. "+
+      "Giữ chế độ Gemini hoặc MiCTS đã được chọn và ghi nhớ trước đó. "+"Home → Gemini có cơ chế riêng và chỉ chạy khi đã bật, cấp WRITE_SETTINGS. "+
       "Nếu MiCTS mất kết nối Google VIS, app sẽ không cưỡng ép thay đổi gây lỗi; mở Google rồi chọn lại Google làm trợ lý.\n\n"+
       "Khôi phục cần quyền WRITE_SECURE_SETTINGS và được HyperOS cho chạy sau reboot. "+
       "MiCTS không root có thể không hoạt động khi bị đặt thành trợ lý mặc định.");
@@ -241,6 +273,10 @@ public class MainActivity extends Activity {
     sub.setPadding(0,dp(6),0,dp(20));layout.addView(sub);
     status=tv("",14,0xffe2eafe);status.setPadding(dp(14),dp(16),dp(14),dp(16));
     status.setBackground(rounded(0xff25344b));layout.addView(status);
+    button("BẬT tự khôi phục Home → Gemini",0xff2962c9,()->toggleHome(true));
+    button("TẮT tự khôi phục Home",0xff394457,()->toggleHome(false));
+    button("Cấp quyền sửa cài đặt hệ thống",0xff137f6a,()->HomeRestore.openPermissionScreen(this));
+    button("Sao chép lệnh ADB Home",0xff394457,this::copyHome);
     button("Chuyển sang Gemini",0xff2962c9,()->select(GEMINI));
     button("Chuyển sang MiCTS (thử nghiệm)",0xff137f6a,()->select(CIRCLE));
     button("Mở MiCTS để thử",0xff394457,this::openMiCTS);
@@ -260,5 +296,5 @@ public class MainActivity extends Activity {
     }
     capture(this);update();
   }
-  @Override protected void onResume(){super.onResume();if(status!=null)update();}
+  @Override protected void onResume(){super.onResume();if(status!=null){if(HomeRestore.enabled(this)&&HomeRestore.hasWritePermission(this))HomeRestore.restore(this);update();}}
 }
