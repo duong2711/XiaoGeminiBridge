@@ -1,4 +1,4 @@
-# Gemini Home Restore — Legacy v4.6 (THỬ NGHIỆM, chưa xác nhận trên máy thật)
+# Gemini Home Restore — Legacy v4.7 (THỬ NGHIỆM, chưa xác nhận trên máy thật)
 
 > Bản thử nghiệm tách riêng khỏi v4.4. **Không root.** Chỉ hướng đến Xiaomi 13 Ultra / HyperOS 3 ROM Trung Quốc. Mục tiêu: khôi phục `long_press_home_key=launch_google_search` sau khi khởi động lại hoặc mở khóa.
 >
@@ -12,7 +12,7 @@ Với targetSdk 33, Android có thể ném `IllegalArgumentException` vì APK kh
 
 ## Cài thử nghiệm một lần bằng máy tính
 
-1. Mở GitHub Actions ở nhánh `experiment/home-gemini-legacy-autorestore-20261102` và tải artifact **Gemini-Home-Restore-Legacy-v4.6-APK** từ lượt build thành công. Giải nén để lấy `app-debug.apk`.
+1. Mở GitHub Actions ở nhánh `experiment/home-gemini-legacy-autorestore-20261102` và tải artifact **Gemini-Home-Restore-Legacy-v4.7-APK** từ lượt build thành công. Giải nén để lấy `app-debug.apk`.
 2. Trên máy tính Windows đã có platform-tools/ADB, bật USB debugging, xác nhận kết nối:
 
 ```bat
@@ -41,9 +41,9 @@ adb shell settings get system long_press_home_key
 adb shell pm grant com.ldd.geminirestore.legacy android.permission.WRITE_SECURE_SETTINGS
 ```
 
-Sau đó bấm **Làm mới Google ngay (thử nghiệm)**; nếu đã chọn Google trong Default digital assistant app, ứng dụng giữ nguyên component ID đang có, ghi tạm None rồi khôi phục lại. Không chuyển sang Google nếu bạn đang chọn MiCTS.
+Trong ứng dụng có nút **Làm mới Google ngay (thử nghiệm)** để kiểm tra riêng. Nếu đã chọn Google trong Default digital assistant app, ứng dụng giữ nguyên component ID đang có, ghi tạm None rồi khôi phục lại. Không chuyển sang Google nếu bạn đang chọn MiCTS.
 
-8. Khởi động lại điện thoại và mở khóa. App nghe BOOT_COMPLETED hoặc USER_UNLOCKED và kiểm tra tức thời + 15/45/85 giây. Để biết app thật sự tự sửa được hay không, sau reboot **chưa mở ứng dụng**, thử giữ Home. Nếu muốn kiểm tra bằng ADB:
+8. Khởi động lại điện thoại và mở khóa. **Trình tự tự động bắt buộc:** (1) Home lúc nhận khởi động; (2) chỉ Home ở khoảng 15 và 45 giây; (3) Home lần cuối khoảng 85 giây; (4) **sau cùng** mới thử chuyển Google → None → Google. Các job cũ bị vô hiệu nếu đến muộn, tránh Home chạy lại sau bước Google. Thời gian gọi JobScheduler không tuyệt đối, bản này chỉ xử lý trong cửa sổ 90 giây. Để biết app thật sự tự sửa được hay không, sau reboot **chưa mở ứng dụng**, thử giữ Home. Nếu muốn kiểm tra bằng ADB:
 
 ```bat
 adb shell settings get system long_press_home_key
