@@ -6,8 +6,8 @@ android {
     applicationId 'com.ldd.geminirestore.legacy'
     minSdk 21
     targetSdk 22
-    versionCode 45
-    versionName '4.5.0-legacy-experimental'
+    versionCode 46
+    versionName '4.6.0-legacy-assistant-experimental'
   }
   compileOptions {
     sourceCompatibility JavaVersion.VERSION_17
