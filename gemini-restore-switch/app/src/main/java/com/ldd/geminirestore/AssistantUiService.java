@@ -140,7 +140,13 @@ public final class AssistantUiService extends AccessibilityService {
   }
 
   @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-    if (!running || event == null) return;
+    if (!running) {
+      if (prefs(this).getBoolean("pending_unlock", false) && !locked(this)) {
+        afterUnlock(this);
+      }
+      return;
+    }
+    if (event == null) return;
     int type = event.getEventType();
     if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         || type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -196,6 +202,16 @@ public final class AssistantUiService extends AccessibilityService {
     }
 
     if (state == 3) {
+      // Some firmware shows a confirmation dialog for changing the default.
+      // Handle only a recognized confirmation screen, never random Settings.
+      if (looksLikeConfirm(root)) {
+        AccessibilityNodeInfo ok = find(root, "ok", "confirm", "change",
+            "đồng ý", "xác nhận", "thay đổi", "确定", "确认");
+        if (ok != null && click(ok)) {
+          handler.postDelayed(this::step, 700L);
+          return;
+        }
+      }
       AccessibilityNodeInfo google = find(root, "google");
       if (google != null && looksLikePicker(root)) {
         if (click(google)) {
