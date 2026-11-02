@@ -30,18 +30,18 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: Gemini-Restore-v4.2-Home-APK
+          name: Gemini-Restore-v4.3-Home-APK
           path: gemini-restore-switch/app/build/outputs/apk/debug/*.apk
       - name: Publish APK release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk Gemini-Restore-v4.2-Home.apk
-          if gh release view v4.2.0-home >/dev/null 2>&1; then
-            gh release upload v4.2.0-home Gemini-Restore-v4.2-Home.apk --clobber
+          cp app/build/outputs/apk/debug/app-debug.apk Gemini-Restore-v4.3-Home.apk
+          if gh release view v4.3.0-home >/dev/null 2>&1; then
+            gh release upload v4.3.0-home Gemini-Restore-v4.3-Home.apk --clobber
           else
-            gh release create v4.2.0-home Gemini-Restore-v4.2-Home.apk \
-              --title 'Gemini Restore v4.2 - Home button restore' \
+            gh release create v4.3.0-home Gemini-Restore-v4.3-Home.apk \
+              --title 'Gemini Restore v4.3 - Home button restore' \
               --notes 'Adds long-press Home → Gemini restoration after reboot. Requires user-approved WRITE_SETTINGS; Xiaomi/HyperOS may still block automatic updates. For older debug APKs with different signing keys, uninstall the old APK first.'
           fi
