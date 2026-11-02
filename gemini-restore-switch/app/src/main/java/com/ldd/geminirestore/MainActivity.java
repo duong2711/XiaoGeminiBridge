@@ -78,18 +78,29 @@ public class MainActivity extends Activity {
   public static final class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
       String action = intent.getAction();
-      if (Intent.ACTION_BOOT_COMPLETED.equals(action)
-          || Intent.ACTION_USER_UNLOCKED.equals(action)
-          || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
-        if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
-          AssistantRefresh.onBoot(context);
-        }
-        if (HomeRestore.enabled(context) || AssistantRefresh.enabled(context)) {
-          if (HomeRestore.enabled(context)) HomeRestore.restore(context);
-          scheduleChecks(context);
-        } else {
-          cancelChecks(context);
-        }
+      if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
+          && !Intent.ACTION_USER_UNLOCKED.equals(action)
+          && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
+
+      if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
+        AssistantRefresh.onBoot(context);
+      }
+
+      // An unlock event after the final Google refresh must not initiate
+      // another Home restore in the same boot session.
+      android.content.SharedPreferences prefs = schedulePrefs(context);
+      if (Intent.ACTION_USER_UNLOCKED.equals(action)
+          && prefs.getBoolean("final_started", false)
+          && prefs.getLong("boot_elapsed", -1L) >= 0L
+          && SystemClock.elapsedRealtime() >= prefs.getLong("boot_elapsed", -1L)) {
+        return;
+      }
+
+      if (HomeRestore.enabled(context) || AssistantRefresh.enabled(context)) {
+        if (HomeRestore.enabled(context)) HomeRestore.restore(context);
+        scheduleChecks(context);
+      } else {
+        cancelChecks(context);
       }
     }
   }
@@ -225,10 +236,9 @@ public class MainActivity extends Activity {
                 + "khi điện thoại kết nối USB.")
             .setPositiveButton("Đã hiểu", null).show();
       } else {
-        new Thread(() -> {
-          AssistantRefresh.refresh(this);
-          runOnUiThread(this::updateStatus);
-        }, "AssistantRefreshManual").start();
+        Toast.makeText(this,
+            "Google sẽ được làm mới sau khi hoàn tất các bước Home.",
+            Toast.LENGTH_LONG).show();
       }
     } else if (!HomeRestore.enabled(this)) {
       cancelChecks(this);
@@ -341,7 +351,8 @@ public class MainActivity extends Activity {
   @Override protected void onResume() {
     super.onResume();
     if (status != null) {
-      if (HomeRestore.enabled(this)) HomeRestore.restore(this);
+      // Opening this screen is for inspection only. A Home write here
+      // could otherwise occur AFTER the final automatic Google refresh.
       updateStatus();
     }
   }
