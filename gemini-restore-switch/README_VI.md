@@ -1,27 +1,32 @@
-# Gemini Home Restore v5.0 — bản thử nghiệm không Trợ năng
+# Home → Gemini Auto Restore v6.0
 
-Dựa trên việc kiểm tra mã bên trong file **Gemini_Restore_Auto_V3(1).apk** do người dùng cung cấp. Bản gốc v3 dùng quyền **WRITE_SECURE_SETTINGS** được cấp một lần bằng ADB; không dùng Accessibility. Trình tự v3 gồm xóa tạm `assistant` + `voice_interaction_service`, chờ khoảng 1500 ms, ghi lại Google Voice Interaction Service cụ thể, chờ khoảng 1000 ms và kiểm tra; v3 còn đặt `Settings.Global.power_button_long_press=5` cho **nút nguồn**.
-
-Bản v5.0 này chỉ khôi phục **giữ Home**, không động vào nút nguồn. Sau **mỗi** lượt Home thành công, nó thử trình tự ngắt/bật Google tương đương v3, thay thế bản v4.9 dùng Accessibility. Không còn khai báo hoặc dịch vụ Trợ năng.
-
-## Quyền và cài đặt
-- App `com.ldd.geminirestore.legacy` riêng, không ghi đè bản v3 có package `com.ldd.geminirestore`.
-- Android target SDK 22 cũ để thử ghi `long_press_home_key`; Android mới cần lệnh bỏ chặn cài SDK cũ, chỉ nên cài APK tự biên dịch/tin cậy:
+Mục tiêu duy nhất: sau mỗi lần **khởi động lại máy** (không phải khôi phục cài đặt gốc), tự thử khôi phục khóa hệ thống:
 
 ```bat
-adb install --bypass-low-target-sdk-block -r Gemini-Home-Restore-v5.0.apk
-adb shell pm grant com.ldd.geminirestore.legacy android.permission.WRITE_SECURE_SETTINGS
 adb shell settings put system long_press_home_key launch_google_search
 ```
 
-- Chọn Google trong Default digital assistant app, bật cả hai công tắc và Tự khởi động/Không hạn chế pin của HyperOS.
-- Nút **Thử ngắt → bật Google theo cách v3** thực hiện thao tác ngay để kiểm nghiệm. Nút **Khôi phục Home → làm mới Google ngay** chạy đủ chuỗi.
-- Sau khởi động, ứng dụng có thể nhận `BOOT_COMPLETED` hoặc `USER_UNLOCKED` và lên lịch kiểm tra vào khoảng 15, 45, 85 giây trong tối đa 90 giây. JobScheduler có thể trễ và ROM có thể chặn nền.
+APK chỉ ghi `Settings.System.long_press_home_key=launch_google_search` khi giá trị chưa đúng. Kiểm tra ngay lúc nhận `BOOT_COMPLETED` hoặc `USER_UNLOCKED`, sau đó thử lại khoảng 15/45/85 giây trong cửa sổ tối đa 90 giây. Nếu đã đúng, không ghi lại.
 
-## Cảnh báo
-- **Chưa được kiểm nghiệm thành công trên Xiaomi 13 Ultra HyperOS 3 thực tế**; thao tác ghi Secure Settings có thể không tạo đủ side effect của thao tác None → Google trong giao diện.
-- Quyền `WRITE_SECURE_SETTINGS` là quyền mạnh; chỉ cấp cho APK tin tưởng. `targetSdk 22` hạ mức bảo vệ tương thích Android.
-- App không tự thay MiCTS nếu đang chọn MiCTS. Khi phát hiện lỗi, ứng dụng thử khôi phục cài đặt trước đó; nếu Google bị đặt về None, vào Settings để chọn Google thủ công.
-- Bản v3 gốc điều khiển `power_button_long_press` (nút nguồn), **không phải nút Home**. Việc áp dụng cơ chế dịch vụ trợ lý sang Home là giả thuyết cần thử thực tế.
+**Không thay đổi Google Digital assistant**, không chuyển None → Google, không đụng nút nguồn/MiCTS, không có Accessibility, Shizuku, micro, Internet hoặc root.
 
-Không root, không Accessibility, không quyền mic, không mạng.
+## Cài thử nghiệm
+
+Package riêng: `com.ldd.homegeminirestore`, không đụng tới bản v3 hay bản Legacy cũ.
+
+Tải artifact `Gemini-Home-Only-v6.0-APK` từ GitHub Actions của nhánh `feature/home-only-boot-restore-20261102`, giải nén để lấy APK. Trong thư mục platform-tools:
+
+```bat
+adb devices
+adb install --bypass-low-target-sdk-block -r app-debug.apk
+adb shell appops set com.ldd.homegeminirestore WRITE_SETTINGS allow
+adb shell settings put system long_press_home_key launch_google_search
+```
+
+Mở APK → bật **Tự khôi phục Home khi khởi động**, bật Autostart và Không hạn chế pin trong HyperOS. Để thử, khởi động lại máy, chưa thao tác ADB, thử nhấn giữ Home rồi xem trạng thái trong APK.
+
+## Giới hạn quan trọng
+
+Android/HyperOS có thể chặn một APK thông thường ghi khóa hệ thống riêng `long_press_home_key`, dù ADB shell đặt được. Bản thử nghiệm dùng `targetSdk 22` để thử tính tương thích; Android mới chặn cài theo mặc định (cần `--bypass-low-target-sdk-block`), giảm lớp bảo vệ tương thích/bảo mật. Không cam kết tự phục hồi thành công nếu ROM từ chối ghi. Bản này chưa thử trên Xiaomi 13 Ultra/HyperOS 3 thực tế.
+
+Quyền sửa cài đặt hệ thống phải được cấp thủ công, và HyperOS cần cho phép Auto-start. Nếu bạn **khôi phục cài đặt gốc (factory reset)**, ứng dụng bị xóa và không thể tự phục hồi.
