@@ -3,11 +3,11 @@ android {
   namespace 'com.ldd.geminirestore'
   compileSdk 35
   defaultConfig {
-    applicationId 'com.ldd.geminirestore.legacy'
+    applicationId 'com.ldd.homegeminirestore'
     minSdk 21
     targetSdk 22
-    versionCode 50
-    versionName '5.0.0-v3-secure-refresh-experiment'
+    versionCode 60
+    versionName '6.0.0-home-only-experiment'
   }
   compileOptions {
     sourceCompatibility JavaVersion.VERSION_17
