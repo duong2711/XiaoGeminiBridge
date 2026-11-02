@@ -1,3 +1,18 @@
+# Gemini Restore v4.3 — Chẩn đoán lỗi Home trên HyperOS
+
+- Đã sửa trường hợp ADB thiết lập Home đúng nhưng app vẫn cố ghi lại, gây `IllegalArgumentException`. Ứng dụng nay kiểm tra giá trị **trước khi ghi** và không đụng đến hệ thống nếu đã đúng.
+- Nếu chưa đúng mà ROM không cho ứng dụng tự ghi, hiển thị **thông điệp lỗi đầy đủ** của hệ thống, đồng thời cung cấp lệnh ADB dự phòng. Đây là giới hạn quyền Android/HyperOS; **v4.3 không thể vượt quyền bảo mật**.
+- Tự kiểm tra khi BOOT_COMPLETED và lịch 15 / 45 / 85 giây giữ nguyên, có thể bị HyperOS trì hoãn.
+
+```bat
+adb shell settings get system long_press_home_key
+adb shell settings put system long_press_home_key launch_google_search
+```
+
+**Nâng cấp từ v4.2:** APK debug trên GitHub Actions có thể được ký bằng khóa khác nhau; khi gặp xung đột chữ ký, cần gỡ bản cũ rồi cài v4.3. Gỡ cài đặt sẽ xóa lựa chọn lưu trong ứng dụng.
+
+---
+
 # Gemini Restore v4.2 — Thêm tự khôi phục nút Home
 
 ## Khôi phục nhấn giữ Home → Gemini (HyperOS 3 ROM Trung Quốc)
