@@ -1,36 +1,27 @@
-# Gemini Home Restore v4.9 — thử nghiệm UI Assistant (không root)
+# Gemini Home Restore v5.0 — bản thử nghiệm không Trợ năng
 
-Bản này khắc phục cách làm **không có tác dụng trong v4.8**: thay vì chỉ ghi `Settings.Secure.assistant` / `voice_interaction_service`, phiên bản mới dùng dịch vụ Accessibility do người dùng chủ động bật để **thao tác thật trong Settings → Default apps → Digital assistant app → None → Google**. Android có RoleManager; ghi secure settings không chắc tạo sự kiện cập nhật role/voice-interaction như đổi qua UI.
+Dựa trên việc kiểm tra mã bên trong file **Gemini_Restore_Auto_V3(1).apk** do người dùng cung cấp. Bản gốc v3 dùng quyền **WRITE_SECURE_SETTINGS** được cấp một lần bằng ADB; không dùng Accessibility. Trình tự v3 gồm xóa tạm `assistant` + `voice_interaction_service`, chờ khoảng 1500 ms, ghi lại Google Voice Interaction Service cụ thể, chờ khoảng 1000 ms và kiểm tra; v3 còn đặt `Settings.Global.power_button_long_press=5` cho **nút nguồn**.
 
-## Trình tự
+Bản v5.0 này chỉ khôi phục **giữ Home**, không động vào nút nguồn. Sau **mỗi** lượt Home thành công, nó thử trình tự ngắt/bật Google tương đương v3, thay thế bản v4.9 dùng Accessibility. Không còn khai báo hoặc dịch vụ Trợ năng.
 
-- Sau boot (nếu màn hình đã mở khóa): khôi phục Home trước, sau đó yêu cầu Accessibility mở Default apps để chọn None rồi Google.
-- Nếu còn khóa màn hình: chờ tới khi người dùng mở khóa.
-- Tiếp tục thử theo mốc khoảng 15/45/85 giây sau sự kiện khởi động; chỉ sau mỗi lượt Home thành công mới yêu cầu đổi trợ lý.
-- Dịch vụ tự động chỉ hoạt động khi **đã cấp Accessibility**, có thể bị HyperOS hạn chế; ứng dụng có nút thử thao tác bằng giao diện.
-- Nếu cấu hình Google không phải trợ lý được chọn, không chủ động ghi đè MiCTS hoặc None.
-- Không dùng root, microphone, Internet, nhận diện màn hình bằng ảnh hoặc tọa độ bấm cố định. Accessibility chỉ tìm nhãn trong màn hình Settings khi có một yêu cầu làm mới. Tuy nhiên quyền Accessibility có phạm vi truy cập dữ liệu màn hình rất rộng, chỉ nên cấp khi bạn hiểu và tin tưởng ứng dụng.
-
-## Cách cài thử (Xiaomi 13 Ultra, HyperOS 3 ROM China)
-
-1. Tải artifact `Gemini-Home-Restore-UI-v4.9-APK` từ GitHub Actions rồi giải nén. Nếu dùng bản APK mà ChatGPT cung cấp, đưa `.apk` vào thư mục platform-tools.
-2. Cài APK bằng ADB (vì targetSdk 22 là API cũ, bị Android hạn chế):
+## Quyền và cài đặt
+- App `com.ldd.geminirestore.legacy` riêng, không ghi đè bản v3 có package `com.ldd.geminirestore`.
+- Android target SDK 22 cũ để thử ghi `long_press_home_key`; Android mới cần lệnh bỏ chặn cài SDK cũ, chỉ nên cài APK tự biên dịch/tin cậy:
 
 ```bat
-adb install --bypass-low-target-sdk-block -r Gemini-Home-Restore-v4.9.apk
+adb install --bypass-low-target-sdk-block -r Gemini-Home-Restore-v5.0.apk
+adb shell pm grant com.ldd.geminirestore.legacy android.permission.WRITE_SECURE_SETTINGS
 adb shell settings put system long_press_home_key launch_google_search
 ```
 
-3. Bật Gemini làm trợ lý bên trong ứng dụng Google và chọn Google trong Settings → Default digital assistant app.
-4. Trên điện thoại mở **Gemini Home Restore (Legacy Test)**; bật cả hai công tắc **Tự khôi phục Home** và **Tự đổi None → Google thật sau mỗi lượt Home**.
-5. Chọn nút **Bật quyền Trợ năng (Accessibility)** và bật dịch vụ **Gemini Home: làm mới trợ lý mặc định**. Nếu Android hiện "Restricted setting", mở App info → ⋮ → Allow restricted settings (nếu ROM cung cấp). Chỉ cấp cho app bạn tin tưởng. Bật Tự khởi động, đặt pin Không hạn chế trong HyperOS.
-6. Bấm **Thử đổi None → Google bằng Cài đặt**. Quan sát máy có mở trang trợ lý, chọn None rồi Google thật hay không. Kiểm tra lại bằng cách giữ Home.
-7. Chỉ khi bước 6 thành công mới nên thử reboot và theo dõi tự động sau mở khóa.
+- Chọn Google trong Default digital assistant app, bật cả hai công tắc và Tự khởi động/Không hạn chế pin của HyperOS.
+- Nút **Thử ngắt → bật Google theo cách v3** thực hiện thao tác ngay để kiểm nghiệm. Nút **Khôi phục Home → làm mới Google ngay** chạy đủ chuỗi.
+- Sau khởi động, ứng dụng có thể nhận `BOOT_COMPLETED` hoặc `USER_UNLOCKED` và lên lịch kiểm tra vào khoảng 15, 45, 85 giây trong tối đa 90 giây. JobScheduler có thể trễ và ROM có thể chặn nền.
 
-## Lưu ý
+## Cảnh báo
+- **Chưa được kiểm nghiệm thành công trên Xiaomi 13 Ultra HyperOS 3 thực tế**; thao tác ghi Secure Settings có thể không tạo đủ side effect của thao tác None → Google trong giao diện.
+- Quyền `WRITE_SECURE_SETTINGS` là quyền mạnh; chỉ cấp cho APK tin tưởng. `targetSdk 22` hạ mức bảo vệ tương thích Android.
+- App không tự thay MiCTS nếu đang chọn MiCTS. Khi phát hiện lỗi, ứng dụng thử khôi phục cài đặt trước đó; nếu Google bị đặt về None, vào Settings để chọn Google thủ công.
+- Bản v3 gốc điều khiển `power_button_long_press` (nút nguồn), **không phải nút Home**. Việc áp dụng cơ chế dịch vụ trợ lý sang Home là giả thuyết cần thử thực tế.
 
-- **Chưa xác thực trên máy Xiaomi 13 Ultra HyperOS 3 thực tế**. Khả năng tự bấm tùy thuộc nhãn/phân cấp UI và sự cho phép Accessibility/background launch của HyperOS; máy có thể yêu cầu thao tác xác nhận.
-- Nếu dịch vụ Accessibility bị HyperOS tắt sau reboot, không có cách đáng tin cậy để một APK thường âm thầm tự bật lại quyền đó. Một lần bật lần đầu là bắt buộc.
-- Nếu thao tác đã chọn None nhưng chưa đưa được về Google, vào Settings → Default digital assistant app để chọn Google thủ công và xem kết quả trạng thái trong APK. Ứng dụng không ép thoát màn hình Settings khi lỗi, để bạn có thể sửa ngay.
-- Bản này dùng targetSdk 22 để thử tương thích ghi cài đặt Home; mức bảo vệ Android thấp hơn ứng dụng hiện đại. Chỉ sử dụng cho kiểm thử cá nhân.
-- Bản v4.4 ở package khác không bị ghi đè; v4.9 dùng package `com.ldd.geminirestore.legacy`.
+Không root, không Accessibility, không quyền mic, không mạng.
