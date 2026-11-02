@@ -101,7 +101,7 @@ public final class HomeRestore {
   private static String details(Exception e) {
     String detail = e.getMessage();
     if (detail == null || detail.trim().isEmpty()) return "";
-    detail = detail.replace('\\n', ' ').replace('\\r', ' ').trim();
+    detail = detail.replace('\n', ' ').replace('\r', ' ').trim();
     return " (" + detail.substring(0, Math.min(detail.length(), 260)) + ")";
   }
 
