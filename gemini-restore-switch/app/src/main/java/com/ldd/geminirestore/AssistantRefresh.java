@@ -1,6 +1,5 @@
 package com.ldd.geminirestore;
 
-import android.Manifest;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -57,7 +56,7 @@ public final class AssistantRefresh {
 
   public static boolean permitted(Context c) {
     return Build.VERSION.SDK_INT >= 23
-        && c.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+        && c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS")
             == PackageManager.PERMISSION_GRANTED;
   }
 
