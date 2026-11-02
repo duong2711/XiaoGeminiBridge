@@ -215,7 +215,7 @@ public class MainActivity extends Activity {
     addButton("Sao chép lệnh ADB dự phòng", 0xff324157, this::copyAdb);
 
     TextView note = text(
-        "Ứng dụng chỉ xử lý nút Home, không thay đổi nút nguồn, MiCTS hay trợ lý mặc định.\n\n"
+        "Ứng dụng chỉ xử lý thao tác nhấn giữ Home, không chỉnh các cài đặt trợ lý khác.\n\n"
         + "Sau khởi động, ứng dụng thử khôi phục ngay và kiểm tra lại tối đa 90 giây. "
         + "Hãy bật Tự khởi động và chọn Không hạn chế pin trong HyperOS.\n\n"
         + "Nếu xuất hiện IllegalArgumentException hoặc SecurityException, HyperOS có thể "
