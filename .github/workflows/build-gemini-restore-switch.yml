@@ -1,7 +1,7 @@
 name: Build Gemini Restore Switch APK
 on:
   push:
-    branches: [main, feature/gemini-restore-micts-switch]
+    branches: [main, feature/gemini-restore-micts-switch, fix/gemini-restore-persist-mode]
     paths:
       - 'gemini-restore-switch/**'
       - '.github/workflows/build-gemini-restore-switch.yml'
