@@ -30,7 +30,6 @@ public class MainActivity extends Activity {
   private static final long[] CHECK_DELAYS_MS = {15000L, 45000L, 85000L};
   private static final long MAX_BOOT_WINDOW_MS = 90000L;
   private static final int JOB_BASE = 6240;
-  private static final int FINAL_STAGE = CHECK_DELAYS_MS.length - 1;
   private static final Object RESTORE_LOCK = new Object();
 
   private TextView status;
@@ -50,15 +49,14 @@ public class MainActivity extends Activity {
 
   private static void scheduleChecks(Context context) {
     cancelChecks(context);
-    if (!HomeRestore.enabled(context) && !AssistantRefresh.enabled(context)) return;
+    if (!HomeRestore.enabled(context)) return;
     JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
     if (scheduler == null) return;
-    // Every set of jobs belongs to one schedule generation. A delayed callback
-    // from a previous schedule must never run after Google's final refresh.
+    // Each schedule carries a session token; stale jobs cannot repeat an old
+    // Home/Google cycle after a new boot/unlock cycle has been scheduled.
     long session = SystemClock.elapsedRealtime();
     schedulePrefs(context).edit()
         .putLong("boot_elapsed", session)
-        .putBoolean("final_started", false)
         .commit();
     ComponentName service = new ComponentName(context, RestoreService.class);
     for (int i = 0; i < CHECK_DELAYS_MS.length; i++) {
@@ -75,6 +73,22 @@ public class MainActivity extends Activity {
     }
   }
 
+  /**
+   * A single restore pass is always ordered: first Home, then a Google
+   * None -> Google refresh immediately afterward (if user opted in).
+   * If Home cannot be restored, do not touch the assistant setting.
+   */
+  private static boolean restoreHomeThenGoogle(Context context) {
+    synchronized (RESTORE_LOCK) {
+      if (!HomeRestore.enabled(context)) return false;
+      boolean homeRestored = HomeRestore.restore(context);
+      if (homeRestored && AssistantRefresh.enabled(context)) {
+        AssistantRefresh.refresh(context);
+      }
+      return homeRestored;
+    }
+  }
+
   public static final class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
       String action = intent.getAction();
@@ -82,26 +96,22 @@ public class MainActivity extends Activity {
           && !Intent.ACTION_USER_UNLOCKED.equals(action)
           && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
 
-      if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
-        AssistantRefresh.onBoot(context);
-      }
-
-      // An unlock event after the final Google refresh must not initiate
-      // another Home restore in the same boot session.
-      android.content.SharedPreferences prefs = schedulePrefs(context);
-      if (Intent.ACTION_USER_UNLOCKED.equals(action)
-          && prefs.getBoolean("final_started", false)
-          && prefs.getLong("boot_elapsed", -1L) >= 0L
-          && SystemClock.elapsedRealtime() >= prefs.getLong("boot_elapsed", -1L)) {
-        return;
-      }
-
-      if (HomeRestore.enabled(context) || AssistantRefresh.enabled(context)) {
-        if (HomeRestore.enabled(context)) HomeRestore.restore(context);
-        scheduleChecks(context);
-      } else {
-        cancelChecks(context);
-      }
+      // Do not block the broadcast thread while Google is being rebound.
+      final PendingResult pending = goAsync();
+      new Thread(() -> {
+        try {
+          synchronized (RESTORE_LOCK) {
+            if (HomeRestore.enabled(context)) {
+              restoreHomeThenGoogle(context);
+              scheduleChecks(context);
+            } else {
+              cancelChecks(context);
+            }
+          }
+        } finally {
+          pending.finish();
+        }
+      }, "GeminiRestoreBoot").start();
     }
   }
 
@@ -109,39 +119,26 @@ public class MainActivity extends Activity {
     @Override public boolean onStartJob(JobParameters params) {
       new Thread(() -> {
         try {
+          android.content.SharedPreferences prefs = schedulePrefs(this);
+          PersistableBundle extras = params.getExtras();
+          long requestedSession = extras.getLong("session", -1L);
+          int stage = extras.getInt("stage", -1);
+
           synchronized (RESTORE_LOCK) {
-            android.content.SharedPreferences prefs = schedulePrefs(this);
             long start = prefs.getLong("boot_elapsed", -1L);
-            PersistableBundle extras = params.getExtras();
-            long requestedSession = extras.getLong("session", -1L);
-            int stage = extras.getInt("stage", -1);
             long elapsed = SystemClock.elapsedRealtime() - start;
-
             if (start < 0L || requestedSession != start
-                || stage < 0 || stage > FINAL_STAGE
-                || elapsed < 0L || elapsed > MAX_BOOT_WINDOW_MS
-                || prefs.getBoolean("final_started", false)) {
-              return; // Outdated/late job or already finalized: no more Home writes.
+                || stage < 0 || stage >= CHECK_DELAYS_MS.length
+                || elapsed < 0L || elapsed > MAX_BOOT_WINDOW_MS) {
+              return; // Stale or late job. Ignore it.
             }
-
-            if (stage == FINAL_STAGE) {
-              // Commit before the final Home check: even a delayed 15/45-second
-              // job cannot touch Home after we start refreshing Google.
-              prefs.edit().putBoolean("final_started", true).commit();
-            }
-
-            if (HomeRestore.enabled(this)) HomeRestore.restore(this);
-
-            // Google is ALWAYS the last automatic operation, after all Home
-            // checks, and never in either of the earlier scheduled jobs.
-            if (stage == FINAL_STAGE && AssistantRefresh.pending(this)) {
-              AssistantRefresh.refresh(this);
-            }
+            // At 15s, 45s AND 85s: Home first, Google immediately after.
+            restoreHomeThenGoogle(this);
           }
         } finally {
           jobFinished(params, false);
         }
-      }, "GeminiRestoreStage").start();
+      }, "GeminiRestorePair").start();
       return true;
     }
     @Override public boolean onStopJob(JobParameters params) { return false; }
@@ -208,7 +205,10 @@ public class MainActivity extends Activity {
           .setPositiveButton("Mở cài đặt", (dialog, which) -> HomeRestore.openPermissionScreen(this))
           .setNegativeButton("Để sau", null).show();
     } else {
-      HomeRestore.restore(this);
+      new Thread(() -> {
+        restoreHomeThenGoogle(this);
+        runOnUiThread(this::updateStatus);
+      }, "GeminiRestoreManual").start();
     }
     updateStatus();
   }
@@ -218,15 +218,21 @@ public class MainActivity extends Activity {
       Toast.makeText(this, "Hãy bật tự khôi phục trước.", Toast.LENGTH_SHORT).show();
       return;
     }
-    boolean ok = HomeRestore.restore(this);
-    updateStatus();
-    Toast.makeText(this, ok ? "Giá trị Home đã đúng." : "Chưa khôi phục được. Xem trạng thái.", Toast.LENGTH_LONG).show();
+    new Thread(() -> {
+      boolean ok = restoreHomeThenGoogle(this);
+      runOnUiThread(() -> {
+        updateStatus();
+        Toast.makeText(this, ok
+            ? "Đã kiểm tra Home và thực hiện bước làm mới Google nếu được bật."
+            : "Chưa khôi phục được Home. Xem trạng thái.",
+            Toast.LENGTH_LONG).show();
+      });
+    }, "GeminiRestoreManual").start();
   }
 
   private void enableAssistant(boolean enabled) {
     AssistantRefresh.setEnabled(this, enabled);
     if (enabled) {
-      scheduleChecks(this);
       if (!AssistantRefresh.permitted(this)) {
         new AlertDialog.Builder(this)
             .setTitle("Cần cấp quyền ADB một lần")
@@ -237,7 +243,7 @@ public class MainActivity extends Activity {
             .setPositiveButton("Đã hiểu", null).show();
       } else {
         Toast.makeText(this,
-            "Google sẽ được làm mới sau khi hoàn tất các bước Home.",
+            "Google sẽ được làm mới ngay sau mỗi lượt khôi phục Home.",
             Toast.LENGTH_LONG).show();
       }
     } else if (!HomeRestore.enabled(this)) {
@@ -305,7 +311,7 @@ public class MainActivity extends Activity {
     });
 
     assistantSwitch = new Switch(this);
-    assistantSwitch.setText("Tự làm mới Google sau khi khởi động");
+    assistantSwitch.setText("Làm mới Google sau mỗi lượt khôi phục Home");
     assistantSwitch.setTextSize(16);
     assistantSwitch.setTextColor(Color.WHITE);
     assistantSwitch.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -325,7 +331,7 @@ public class MainActivity extends Activity {
     status.setBackground(background(0xff223249));
     content.addView(status, statusParams);
 
-    addButton("Kiểm tra & khôi phục Home", 0xff2563c6, this::checkNow);
+    addButton("Khôi phục Home → làm mới Google ngay", 0xff2563c6, this::checkNow);
     addButton("Làm mới Google ngay (thử nghiệm)", 0xff2563c6, this::refreshAssistantNow);
     addButton("Sao chép lệnh cấp quyền trợ lý bằng ADB", 0xff32546b, this::copyGrant);
     addButton("Cấp quyền sửa cài đặt", 0xff32546b, () -> HomeRestore.openPermissionScreen(this));
@@ -333,12 +339,14 @@ public class MainActivity extends Activity {
 
     TextView note = text(
         "BẢN THỬ NGHIỆM: chỉ cài bằng ADB; sử dụng targetSdk 22 nên giảm lớp bảo vệ tương thích/bảo mật của Android.\n\n"
-        + "Khi bật tự làm mới Google, sau mỗi lần khởi động APK thử chuyển "
+        + "Sau mỗi lượt khôi phục Home thành công, APK lập tức thử chuyển "
         + "trợ lý Google sang None rồi trả lại giá trị chính xác ban đầu, "
         + "không tự chọn Google nếu bạn đang dùng MiCTS. "
         + "Cần ADB một lần để cấp WRITE_SECURE_SETTINGS. "
         + "Chưa bảo đảm tương đương thao tác đổi trong Settings.\n\n"
-        + "Sau khởi động: Home trước, kiểm tra Home tại 15 và 45 giây; lượt cuối khoảng 85 giây kiểm tra Home rồi mới làm mới Google. Tất cả trong cửa sổ tối đa 90 giây (thời gian thực tế phụ thuộc HyperOS). "
+        + "Sau khởi động: Home → Google ngay; lặp lại cùng thứ tự ở các lượt "
+        + "15, 45 và 85 giây nếu Home đã sẵn sàng. Tất cả trong cửa sổ "
+        + "tối đa 90 giây (thời gian thực tế phụ thuộc HyperOS). "
         + "Hãy bật Tự khởi động và chọn Không hạn chế pin trong HyperOS.\n\n"
         + "Nếu xuất hiện IllegalArgumentException hoặc SecurityException, HyperOS có thể "
         + "không cho APK thường ghi cài đặt này, dù ADB thủ công vẫn làm được.",
@@ -351,8 +359,7 @@ public class MainActivity extends Activity {
   @Override protected void onResume() {
     super.onResume();
     if (status != null) {
-      // Opening this screen is for inspection only. A Home write here
-      // could otherwise occur AFTER the final automatic Google refresh.
+      // Opening this screen only displays status; it does not run extra cycles.
       updateStatus();
     }
   }
