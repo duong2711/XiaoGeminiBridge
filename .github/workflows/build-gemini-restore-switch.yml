@@ -28,5 +28,5 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: Gemini-Restore-v4-Switch-APK
+          name: Gemini-Restore-v4.2-Home-APK
           path: gemini-restore-switch/app/build/outputs/apk/debug/*.apk
