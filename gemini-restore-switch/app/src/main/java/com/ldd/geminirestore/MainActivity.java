@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
     @Override public void onReceive(Context context, Intent intent) {
       String action = intent.getAction();
       if (Intent.ACTION_BOOT_COMPLETED.equals(action)
+          || Intent.ACTION_USER_UNLOCKED.equals(action)
           || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
         if (HomeRestore.enabled(context)) {
           HomeRestore.restore(context);
@@ -184,10 +185,10 @@ public class MainActivity extends Activity {
     scroll.addView(content);
     setContentView(scroll);
 
-    TextView title = text("Home → Gemini", 29, Color.WHITE);
+    TextView title = text("Home → Gemini · Legacy", 29, Color.WHITE);
     title.setTypeface(null, Typeface.BOLD);
     content.addView(title);
-    TextView subtitle = text("Tự khôi phục thao tác nhấn giữ nút Home sau khi khởi động lại.", 15, 0xffacbdd5);
+    TextView subtitle = text("Bản thử nghiệm riêng cho HyperOS 3. Tự khôi phục Home sau khởi động hoặc mở khóa.", 15, 0xffacbdd5);
     subtitle.setPadding(0, dp(8), 0, dp(22));
     content.addView(subtitle);
 
@@ -215,7 +216,8 @@ public class MainActivity extends Activity {
     addButton("Sao chép lệnh ADB dự phòng", 0xff324157, this::copyAdb);
 
     TextView note = text(
-        "Ứng dụng chỉ xử lý thao tác nhấn giữ Home, không chỉnh các cài đặt trợ lý khác.\n\n"
+        "BẢN THỬ NGHIỆM: chỉ cài bằng ADB; sử dụng targetSdk 22 nên giảm lớp bảo vệ tương thích/bảo mật của Android.\n\n"
+        + "Ứng dụng chỉ xử lý thao tác nhấn giữ Home, không chỉnh các cài đặt trợ lý khác.\n\n"
         + "Sau khởi động, ứng dụng thử khôi phục ngay và kiểm tra lại tối đa 90 giây. "
         + "Hãy bật Tự khởi động và chọn Không hạn chế pin trong HyperOS.\n\n"
         + "Nếu xuất hiện IllegalArgumentException hoặc SecurityException, HyperOS có thể "
