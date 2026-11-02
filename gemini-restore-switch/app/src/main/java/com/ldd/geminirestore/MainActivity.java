@@ -17,6 +17,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.os.PersistableBundle;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -29,6 +30,8 @@ public class MainActivity extends Activity {
   private static final long[] CHECK_DELAYS_MS = {15000L, 45000L, 85000L};
   private static final long MAX_BOOT_WINDOW_MS = 90000L;
   private static final int JOB_BASE = 6240;
+  private static final int FINAL_STAGE = CHECK_DELAYS_MS.length - 1;
+  private static final Object RESTORE_LOCK = new Object();
 
   private TextView status;
   private Switch autoSwitch;
@@ -50,11 +53,21 @@ public class MainActivity extends Activity {
     if (!HomeRestore.enabled(context) && !AssistantRefresh.enabled(context)) return;
     JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
     if (scheduler == null) return;
-    schedulePrefs(context).edit().putLong("boot_elapsed", SystemClock.elapsedRealtime()).apply();
+    // Every set of jobs belongs to one schedule generation. A delayed callback
+    // from a previous schedule must never run after Google's final refresh.
+    long session = SystemClock.elapsedRealtime();
+    schedulePrefs(context).edit()
+        .putLong("boot_elapsed", session)
+        .putBoolean("final_started", false)
+        .commit();
     ComponentName service = new ComponentName(context, RestoreService.class);
     for (int i = 0; i < CHECK_DELAYS_MS.length; i++) {
       long delay = CHECK_DELAYS_MS[i];
+      PersistableBundle extras = new PersistableBundle();
+      extras.putLong("session", session);
+      extras.putInt("stage", i);
       JobInfo job = new JobInfo.Builder(JOB_BASE + i, service)
+          .setExtras(extras)
           .setMinimumLatency(delay)
           .setOverrideDeadline(delay + 5000L)
           .build();
@@ -85,16 +98,39 @@ public class MainActivity extends Activity {
     @Override public boolean onStartJob(JobParameters params) {
       new Thread(() -> {
         try {
-          long start = schedulePrefs(this).getLong("boot_elapsed", -1L);
-          long elapsed = SystemClock.elapsedRealtime() - start;
-          if (start >= 0L && elapsed >= 0L && elapsed <= MAX_BOOT_WINDOW_MS) {
+          synchronized (RESTORE_LOCK) {
+            android.content.SharedPreferences prefs = schedulePrefs(this);
+            long start = prefs.getLong("boot_elapsed", -1L);
+            PersistableBundle extras = params.getExtras();
+            long requestedSession = extras.getLong("session", -1L);
+            int stage = extras.getInt("stage", -1);
+            long elapsed = SystemClock.elapsedRealtime() - start;
+
+            if (start < 0L || requestedSession != start
+                || stage < 0 || stage > FINAL_STAGE
+                || elapsed < 0L || elapsed > MAX_BOOT_WINDOW_MS
+                || prefs.getBoolean("final_started", false)) {
+              return; // Outdated/late job or already finalized: no more Home writes.
+            }
+
+            if (stage == FINAL_STAGE) {
+              // Commit before the final Home check: even a delayed 15/45-second
+              // job cannot touch Home after we start refreshing Google.
+              prefs.edit().putBoolean("final_started", true).commit();
+            }
+
             if (HomeRestore.enabled(this)) HomeRestore.restore(this);
-            if (AssistantRefresh.pending(this)) AssistantRefresh.refresh(this);
+
+            // Google is ALWAYS the last automatic operation, after all Home
+            // checks, and never in either of the earlier scheduled jobs.
+            if (stage == FINAL_STAGE && AssistantRefresh.pending(this)) {
+              AssistantRefresh.refresh(this);
+            }
           }
         } finally {
           jobFinished(params, false);
         }
-      }, "GeminiHomeCheck").start();
+      }, "GeminiRestoreStage").start();
       return true;
     }
     @Override public boolean onStopJob(JobParameters params) { return false; }
@@ -292,7 +328,7 @@ public class MainActivity extends Activity {
         + "không tự chọn Google nếu bạn đang dùng MiCTS. "
         + "Cần ADB một lần để cấp WRITE_SECURE_SETTINGS. "
         + "Chưa bảo đảm tương đương thao tác đổi trong Settings.\n\n"
-        + "Sau khởi động, ứng dụng thử khôi phục ngay và kiểm tra lại tối đa 90 giây. "
+        + "Sau khởi động: Home trước, kiểm tra Home tại 15 và 45 giây; lượt cuối khoảng 85 giây kiểm tra Home rồi mới làm mới Google. Tất cả trong cửa sổ tối đa 90 giây (thời gian thực tế phụ thuộc HyperOS). "
         + "Hãy bật Tự khởi động và chọn Không hạn chế pin trong HyperOS.\n\n"
         + "Nếu xuất hiện IllegalArgumentException hoặc SecurityException, HyperOS có thể "
         + "không cho APK thường ghi cài đặt này, dù ADB thủ công vẫn làm được.",
