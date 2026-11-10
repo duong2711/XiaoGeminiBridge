@@ -1,0 +1,25 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- DUMP is a developer permission that requires one explicit ADB grant.
+         This app cannot enable it itself. No root, Accessibility, mic or screenshot. -->
+    <uses-permission android:name="android.permission.DUMP"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <queries>
+        <package android:name="com.google.android.apps.bard"/>
+    </queries>
+    <application android:label="Xiao AI Window Handoff" android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <service android:name=".WindowWatchService" android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local user-opt-in window state handoff for digital assistant"/>
+        </service>
+    </application>
+</manifest>
