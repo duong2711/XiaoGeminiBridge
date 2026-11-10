@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- DUMP is a developer permission that requires one explicit ADB grant.
          This app cannot enable it itself. No root, Accessibility, mic or screenshot. -->
-    <uses-permission android:name="android.permission.DUMP"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -10,6 +9,12 @@
     </queries>
     <application android:label="Xiao AI Window Handoff" android:allowBackup="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <provider android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
