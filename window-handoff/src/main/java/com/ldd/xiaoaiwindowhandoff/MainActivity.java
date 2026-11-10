@@ -35,7 +35,7 @@ public final class MainActivity extends Activity {
         Button start = new Button(this);
         start.setText("Bật theo dõi Xiao AI");
         start.setOnClickListener(v -> {
-            if (checkSelfPermission(Manifest.permission.DUMP) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission("android.permission.DUMP") != PackageManager.PERMISSION_GRANTED) {
                 update("Chưa có quyền DUMP. Cần cấp qua ADB trước.");
                 return;
             }
@@ -94,7 +94,7 @@ public final class MainActivity extends Activity {
 
     private void refresh() {
         if (status == null) return;
-        String granted = checkSelfPermission(Manifest.permission.DUMP) ==
+        String granted = checkSelfPermission("android.permission.DUMP") ==
             PackageManager.PERMISSION_GRANTED ? "đã cấp" : "chưa cấp";
         String recent = getSharedPreferences("state", MODE_PRIVATE)
             .getString("last", "Chưa nhận sự kiện Xiao AI");
