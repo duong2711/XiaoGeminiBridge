@@ -1,35 +1,33 @@
-# Xiao AI Window Handoff (experimental)
+# Xiao AI → Gemini (Shizuku, không root, không Trợ năng)
 
-This is an **actual APK prototype**, but it is **not verified to catch Xiao AI's floating bubble** on HyperOS 3. It uses a foreground service only when the user turns it on.
+**Prototype – chưa thử trên Xiaomi 13 Ultra HyperOS 3.**
 
-- No root, Accessibility, microphone, screenshots, screen recording, or notification listening.
-- It requires **android.permission.DUMP** (a sensitive developer permission) granted once via ADB.
-- Checks `dumpsys window windows` every 800ms while the screen is on and tries to identify a visible window owned by Xiaomi VoiceAssist.
-- On a new matching window, requests launching Gemini and posts a clickable notification fallback.
-- Does not force-stop Xiao AI and cannot dispatch a Back gesture without a privileged mechanism.
-- Does not record raw window dumps, and makes no network requests.
+### Nguyên lý
 
-## Install and grant
+- Người dùng chủ động bật foreground service.
+- Khi màn hình đang mở, Shizuku (ADB UID 2000) cho phép đọc `dumpsys window windows` định kỳ ~800 ms.
+- Nếu tìm được cửa sổ nổi của `com.miui.voiceassist` / các gói Xiaomi tương ứng thì gửi **KEYCODE_BACK** ngay, sau đó chạy `am start -a android.intent.action.ASSIST` để gọi trợ lý Android mặc định (hy vọng Gemini).
+- Nếu lệnh ASSIST thất bại thì thử mở ứng dụng Gemini `com.google.android.apps.bard` trực tiếp.
+- Có chống lặp 6,5 giây, ngừng quét khi màn hình tắt, dừng hoàn toàn nếu Shizuku mất quyền.
+- Không root, không Accessibility, không micro riêng hay ghi hình. Không tắt Xiaomi VoiceTrigger, không chỉnh sửa tài khoản và không đụng dữ liệu ứng dụng ngân hàng.
 
-Install APK, then use ADB:
+### Điều kiện sử dụng
 
-```bat
-adb shell pm grant com.ldd.xiaoaiwindowhandoff android.permission.DUMP
-```
+1. Cài Shizuku từ https://shizuku.rikka.app/ và khởi chạy bằng **Wireless debugging/ADB**, không dùng root.
+2. Cài APK này và chọn **Cấp quyền Shizuku** (chỉ cấp nếu bạn tin tưởng mã nguồn).
+3. Đặt Gemini làm trợ lý mặc định Android trong Settings.
+4. Bật **Theo dõi Xiao AI**. Nhấn **Dừng theo dõi ngay** để dừng.
+5. Sau khi khởi động lại phải kích hoạt lại Shizuku bằng Wireless debugging trước khi sử dụng; giới hạn của Shizuku không root.
 
-Open the app and enable **Bật theo dõi Xiao AI**. You can stop it in the app any time.
-If the ADB grant is rejected by this OEM, the app cannot do the detection.
+### Hạn chế nghiêm trọng
 
-To revoke the sensitive permission:
+- Chưa xác minh Xiaomi VoiceAssist hiển thị đủ tín hiệu qua WindowManager; biểu tượng Xiao AI có thể không được phát hiện.
+- Đọc dump mỗi ~800ms có thể gây hao pin, dù không nghe micro và tạm ngừng khi màn hình tắt.
+- Shizuku có quyền ADB shell rộng, chỉ cấp cho APK tự kiểm chứng nguồn. Việc không bật Accessibility **không bảo đảm** VNeID/ngân hàng tương thích.
+- Khi phát hiện sai, thao tác Back có thể đóng ứng dụng đang mở; chỉ thử trên màn hình chính, không bật khi đang thao tác ngân hàng.
+- Hệ thống có thể chặn giao diện Gemini hoặc yêu cầu mở khóa màn hình; không cam kết “ngay lập tức” trong mọi trường hợp.
+- Không có cơ chế bí mật tự bật lại quyền, không force-stop Xiaomi, không xóa dữ liệu.
 
-```bat
-adb shell pm revoke com.ldd.xiaoaiwindowhandoff android.permission.DUMP
-```
+Nguồn API: https://github.com/RikkaApps/Shizuku-API
 
-The app does not install accessibility services. Banking/VNeID compatibility has not been verified, and `DUMP` exposes sensitive system state. Inspect the source and weigh privacy risk before using on a primary device.
-
-## Limitations
-
-WindowManager does not have to represent a Xiaomi hotword bubble as a separately visible window. The detection heuristics may miss it or mistake an ordinary Xiaomi screen for voice UI. The OS may block background activity launches, and opening Gemini does not imply Xiao AI has been closed. No guaranteed `小爱同学` → Gemini experience.
-
-This prototype is independent of the GeminiGuard accessibility toggle fix and can be removed without affecting default assistant settings.
+Bản này là nhánh thử nghiệm riêng; không được hợp nhất vào phiên bản ổn định.
